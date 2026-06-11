@@ -60,7 +60,7 @@ SUSI/
 
 ### 1. venv aktivieren
 ```powershell
-cd C:\Users\tsinn\VSCode\Repos\SUSI
+_cd C:\Users\tsinn\VSCode\Repos\SUSI_neu
 susi_env\Scripts\activate
 ```
 
