@@ -109,5 +109,5 @@ Die in Kapitel 06 dokumentierten Grenzerfahrungen bleiben bestehen und werden du
 
 ---
 
-*→ Zurück zur Übersicht: [susi_00_uebersicht.md](susi_00_uebersicht.md)*  
+*→ Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
 *Stand: Juni 2026 · Martin Freimuth*

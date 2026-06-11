@@ -259,6 +259,6 @@ LoRA ist kein neues Konzept — es taucht in der Literatur regelmäßig auf. Der
 
 ---
 
-*→ Zurück zur Übersicht: [susi_00_uebersicht.md](susi_00_uebersicht.md)*  
+*→ Zurück zur Übersicht: [susi_00_Übersicht.md](susi_00_übersicht.md)*  
 *→ Weiter: [susi_03_susipedia.md](susi_03_susipedia.md)*  
 *Stand: Juni 2026 · Martin Freimuth*

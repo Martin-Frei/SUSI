@@ -139,6 +139,6 @@ Die neue Architektur dreht das Verhältnis um: die KI ist ein hocheffizienter Se
 
 ---
 
-*→ Zurück zur Übersicht: [susi_00_uebersicht.md](susi_00_uebersicht.md)*  
+*→ Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
 *→ Weiter: [susi_06_grenzerfahrungen.md](susi_06_grenzerfahrungen.md)*  
 *Stand: Juni 2026 · Martin Freimuth*

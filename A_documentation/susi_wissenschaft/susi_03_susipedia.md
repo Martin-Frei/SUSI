@@ -219,6 +219,6 @@ Danach wurde die Remote-Verbindung neu gesetzt und die bereinigte History mit `-
 
 ---
 
-*→ Zurück zur Übersicht: [susi_00_uebersicht.md](susi_00_uebersicht.md)*  
+*→ Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
 *→ Weiter: [susi_04_evaluation.md](susi_04_evaluation.md)*  
 *Stand: Juni 2026 · Martin Freimuth*

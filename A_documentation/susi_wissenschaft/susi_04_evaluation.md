@@ -477,6 +477,6 @@ Die bisherigen Läufe haben die Konfiguration deutlich verbessert — aber mehre
 
 ---
 
-*→ Zurück zur Übersicht: [susi_00_uebersicht.md](susi_00_uebersicht.md)*  
+*→ Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
 *→ Weiter: [susi_05_sackgassen.md](susi_05_sackgassen.md)*  
 *Stand: Juni 2026 · Martin Freimuth*

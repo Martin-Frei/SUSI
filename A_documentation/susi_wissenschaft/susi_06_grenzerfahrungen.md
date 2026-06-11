@@ -73,6 +73,6 @@ Das externe Review hat diese blinden Flecken sichtbar gemacht. Das ist der Wert 
 
 ---
 
-*→ Zurück zur Übersicht: [susi_00_uebersicht.md](susi_00_uebersicht.md)*  
+*→ Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
 *→ Weiter: [susi_07_roadmap.md](susi_07_roadmap.md)*  
 *Stand: Juni 2026 · Martin Freimuth*
