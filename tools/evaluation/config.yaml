@@ -1,0 +1,125 @@
+# ── Meta ──────────────────────────────────────────────────────────
+meta:
+  name: "SUSI RAG Evaluation v2 — Fokus-Lauf"
+  version: "2.0"
+  datum: "2026-05-25"
+  docs_path: "docs"
+  fragen_path: "tools/evaluation/testfragen.json"
+  output_path: "tools/evaluation/eval_bge_mxbai.csv"
+  seed: 42
+
+data_engineering:
+  chunk_sizes:
+    - 1000   # Baseline beide
+
+  chunk_overlaps:
+    - 50       # aktueller SUSI Standard
+
+  separators:
+    default: ["## ", "### ", "\n\n", "\n", " "]
+
+  embedding_models:
+    - name: "nomic-embed-text"
+      dim: 768
+      context: 8192
+      active: false
+
+    - name: "bge-m3"
+      dim: 1024
+      context: 8192
+      active: true
+
+    - name: "mxbai-embed-large"
+      dim: 1024
+      context: 512
+      active: false      
+
+  embedding_device: "cuda"
+
+retrieval:
+  top_k_values:
+    - 5
+
+  algorithms:
+    - name: "similarity"
+      active: true
+    - name: "mmr"
+      lambda_mult: 0.5
+      active: false     # nach erstem Lauf aktivieren
+
+  score_thresholds:
+    - null             # kein Threshold erstmal
+
+generation:
+  llm_models:
+    - name: "qwen2.5-coder:7b"
+      vram_gb: 6
+      active: true
+    - name: "llama3.1:8b"
+      vram_gb: 6
+      active: true
+
+  temperatures:
+    - 0.0
+
+  system_prompts:
+    - name: "susi_standard"
+      active: false
+      text: |
+        Du bist SUSI, Martins persönliche KI-Assistentin.
+        Sprich Martin IMMER mit "du" an.
+        Lies den Kontext vollständig. Antworte NUR daraus.
+        Bei persönlichen Fragen: NUR Kontext, nie erfinden.
+        Bei allgemeinen Fragen: eigenes Wissen erlaubt.
+        Wenn nicht im Kontext: "Dazu fehlt mir noch was in der SUSIpedia!"
+
+    - name: "praezise_alt"
+      active: false
+      text: |
+        Du bist ein präziser KI-Assistent.
+        Antworte AUSSCHLIESSLICH basierend auf dem gegebenen Kontext.
+        Wenn die Antwort nicht im Kontext steht, sage: "Diese Information ist nicht verfügbar."
+        Keine Spekulationen. Keine Ergänzungen aus eigenem Wissen.
+        Antworte auf Deutsch in vollständigen Sätzen.
+
+    - name: "praezise_neu"
+      active: true
+      text: |
+        Du bist ein präziser KI-Assistent.
+        Antworte basierend auf dem gegebenen Kontext.
+        Wenn du die Antwort nicht eindeutig findest,
+        gib an was du gefunden hast und markiere es als unsicher.
+        Sage NICHT einfach "nicht verfügbar" wenn relevanter
+        Kontext vorhanden ist.
+        Keine Spekulationen aus eigenem Wissen.
+        Antworte auf Deutsch in vollständigen Sätzen.
+
+    - name: "praezise_Chain_of_Thought"
+      active: true
+      text: |
+        Du bist ein präziser technischer Assistent für dei RAG Bibliothek von Martin.
+        Gehe in zwei Schritten vor:
+        SCHRITT 1: Analysiere den Kontext auf direkte Übereinstimmungen zur Frage.
+        SCHRITT 2: Wenn eine direkte Antwort gefunden wird, antworte präzise auf Deutsch. 
+        Wenn keine direkte Antwort gefunden wird, nenne die am stärksten verwandten Informationen aus dem Kontext und markiere diese explizit als [INDIREKT/UNSICHER].
+        Antworte in vollständigen Sätzen.
+        Bleibe strikt beim Kontext, keine Ergänzungen aus eigenem Wissen.
+
+    - name: "praezise_hybrid"
+      active: true
+      text: |
+        Du bist ein präziser technischer Assistent für die RAG-Bibliothek von Martin.
+        
+        Deine Wissensquelle hat zwei Ebenen:
+        EBENE 1: Der bereitgestellte Kontext (Dokumente).
+        EBENE 2: Dein internes, allgemeines Expertenwissen.
+        
+        Gehe wie folgt vor:
+        1. Suche die Antwort primär im bereitgestellten KONTEXT.
+        2. Wenn der KONTEXT die Antwort nicht enthält, nutze dein internes Expertenwissen.
+        3. Wenn du dein internes Wissen nutzt, beginne die Antwort mit: "Basierend auf meinem allgemeinen Wissen..."
+        4. Wenn du den KONTEXT nutzt, antworte präzise und direkt mit der Wortwahl aus dem Kontext.
+        
+        - Antworte auf Deutsch in vollständigen Sätzen.
+        - Sei bei technischen Daten aus dem KONTEXT strikt.
+        - Halluziniere nicht. Wenn du dir bei einer Antwort unsicher bist, sage das explizit.

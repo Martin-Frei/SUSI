@@ -1,0 +1,329 @@
+# ══════════════════════════════════════════════════════════════════
+# SUSI RAG Evaluierungs-Konfiguration
+# ══════════════════════════════════════════════════════════════════
+# Jeder Parameter kann einzeln aktiviert/deaktiviert werden.
+# Das Script läuft alle aktiven Kombinationen durch (Grid-Lauf).
+# Kommentar-Blöcke mit # auskommentieren um Parameter zu deaktivieren.
+# ══════════════════════════════════════════════════════════════════
+
+# ── Meta ──────────────────────────────────────────────────────────
+meta:
+  name: "SUSI RAG Evaluation"
+  version: "1.0"
+  datum: "2026-05-23"
+  docs_path: "docs"
+  fragen_path: "tools/evaluation/testfragen.json"
+  output_path: "tools/evaluation/eval_results.csv"
+  seed: 42                    # Fixer Seed für Reproduzierbarkeit
+
+
+# ══════════════════════════════════════════════════════════════════
+# SÄULE 1: DATA ENGINEERING
+# Wird einmalig offline ausgeführt.
+# Jede Kombination aus chunk_size + overlap + embedding_model
+# erzeugt eine eigene ChromaDB Collection.
+# ══════════════════════════════════════════════════════════════════
+
+data_engineering:
+
+  # Chunk Size — Größe der Text-Abschnitte in Zeichen
+  # Klein = präzise aber wenig Kontext
+  # Groß = mehr Kontext aber mehr Rauschen
+  chunk_sizes:
+    - 200
+    - 300       # aktueller SUSI Standard (persönlich)
+    - 500       # aktueller SUSI Standard (technisch)
+    - 750
+    - 1000
+
+  # Chunk Overlap — Überlappung zwischen Chunks in Zeichen
+  # Verhindert dass Sätze an Schnittstellen zerrissen werden
+  chunk_overlaps:
+    - 0         # kein Overlap (Baseline)
+    - 50        # aktueller SUSI Standard
+    - 100
+    - 150
+
+  # Separatoren — wo wird gesplittet?
+  # Der Splitter versucht von links nach rechts zu splitten
+  separators:
+    default:    ["## ", "### ", "\n\n", "\n", " "]
+    aggressive: ["## ", "\n\n", "\n"]
+    soft:       ["\n\n", "\n", ". "]
+
+  # Embedding Modelle — wandeln Text in Vektoren um
+  # WICHTIG: Jedes Modell erzeugt eine eigene ChromaDB Collection!
+  # Modelle müssen via Ollama verfügbar sein.
+  embedding_models:
+    - name: "nomic-embed-text"
+      dim: 768
+      context: 8192
+      note: "aktueller SUSI Standard, solide Basis"
+      active: true
+
+    - name: "bge-m3"
+      dim: 1024
+      context: 8192
+      note: "bester Allrounder, starke deutsche Sprachverarbeitung, unterstützt Hybrid-Suche"
+      active: true
+
+    - name: "mxbai-embed-large"
+      dim: 1024
+      context: 512
+      note: "spezialisiert auf fachsprachliche Texte"
+      active: true
+
+    - name: "multilingual-e5-large"
+      dim: 1024
+      context: 512
+      note: "robust bei gemischtsprachigen Inhalten"
+      active: false          # aktivieren wenn DE/EN Mix getestet werden soll
+
+    - name: "paraphrase-multilingual-MiniLM-L12-v2"
+      dim: 384
+      context: 512
+      note: "ressourcenschonend bei großem Datenvolumen"
+      active: false          # aktivieren für CPU-only Tests
+
+  # Hardware für Embedding
+  # CPU entlastet VRAM für das LLM
+  embedding_device: "cpu"    # "cpu" oder "cuda"
+
+
+# ══════════════════════════════════════════════════════════════════
+# SÄULE 2: RETRIEVAL
+# Wird bei jeder Frage online ausgeführt.
+# Nur die Frage wird zur Laufzeit embedded.
+# ══════════════════════════════════════════════════════════════════
+
+retrieval:
+
+  # Top-K — Anzahl der zurückgegebenen Chunks
+  # Mehr = mehr Kontext aber auch mehr Rauschen
+  # Mehr belastet das Context Window des LLM
+  top_k_values:
+    - 3
+    - 5
+    - 8          # aktueller SUSI Standard
+    - 10
+    - 15
+    - 20
+
+  # Such-Algorithmus
+  algorithms:
+    - name: "similarity"
+      note: "reine Cosine Similarity — Standard"
+      active: true
+
+    - name: "mmr"
+      note: "Maximal Marginal Relevance — mehr Diversität, weniger Redundanz"
+      lambda_mult: 0.5      # 0.0 = max Diversität, 1.0 = max Relevanz
+      active: true
+
+    # HINWEIS: Hybrid-Suche (BM25 + Vektoren) ist in ChromaDB NICHT nativ!
+    # Für Hybrid-Suche: manueller BM25-Workaround ODER Wechsel zu Weaviate/Qdrant
+    - name: "hybrid_bm25"
+      note: "BM25 + Vektorsuche — benötigt manuellen Workaround in ChromaDB"
+      bm25_weight: 0.3      # Gewicht der Keyword-Suche
+      vector_weight: 0.7    # Gewicht der Vektorsuche
+      active: false          # erst aktivieren wenn BM25 implementiert ist
+
+  # Score Threshold — minimale Ähnlichkeit für einen Chunk
+  # Chunks unter dem Threshold werden verworfen
+  score_thresholds:
+    - null          # kein Threshold (Standard)
+    - 0.5
+    - 0.6
+    - 0.7
+    - 0.8
+
+  # Query Expansion — Frage vor dem Retrieval erweitern
+  # Verbessert Recall bei kurzen oder vagen Fragen
+  query_expansion:
+    enabled: false  # aktivieren wenn implementiert
+    method: "llm"   # "llm" oder "synonyme"
+
+
+# ══════════════════════════════════════════════════════════════════
+# SÄULE 3: GENERATION
+# Das LLM generiert die Antwort aus Frage + Kontext.
+# ══════════════════════════════════════════════════════════════════
+
+generation:
+
+  # LLM Modelle — müssen via Ollama verfügbar sein
+  # VRAM-Bedarf beachten! Embedding läuft auf CPU.
+  llm_models:
+    - name: "qwen2.5-coder:7b"
+      vram_gb: 6
+      note: "aktueller SUSI Standard, Coding-Fokus"
+      active: true
+
+    - name: "llama3.1:8b"
+      vram_gb: 6
+      note: "Allrounder für Logik und Sprachverständnis"
+      active: true
+
+    - name: "gemma2:9b"
+      vram_gb: 8
+      note: "starke logische Schlussfolgerungen"
+      active: true
+
+    - name: "mistral-nemo:12b"
+      vram_gb: 10
+      note: "maximale Komplexität für RTX 4070 (12GB)"
+      active: false          # aktivieren wenn 12GB VRAM verfügbar
+
+    - name: "qwen2.5-coder:14b"
+      vram_gb: 12
+      note: "höchste Präzision, braucht 12GB VRAM"
+      active: false          # aktivieren für RTX 4070 voll ausgereizt
+
+    # RTX 3090 (24GB VRAM) — aktivieren nach Hardware-Upgrade
+    - name: "qwen2.5-coder:32b"
+      vram_gb: 20
+      note: "32B Modell, braucht RTX 3090"
+      active: false
+
+    - name: "llama3.1:70b"
+      vram_gb: 40
+      note: "70B Modell, braucht 2x RTX 3090"
+      active: false
+
+  # Temperature — Kreativität vs. Präzision
+  # 0.0 = deterministisch, immer gleiche Antwort
+  # 1.0 = kreativ, variable Antworten
+  temperatures:
+    - 0.0        # deterministisch (Baseline)
+    - 0.1        # sehr präzise
+    - 0.3        # ausgewogen
+    - 0.5        # etwas kreativer
+    - 0.7        # kreativ (für generative Tasks)
+
+  # System Prompt Varianten
+  # Definieren die Rolle und das Verhalten des LLM
+  system_prompts:
+
+    - name: "praezise"
+      note: "Faktenorientiert, nur Kontext, kein Erfinden"
+      text: |
+        Du bist ein präziser KI-Assistent.
+        Antworte AUSSCHLIESSLICH basierend auf dem gegebenen Kontext.
+        Wenn die Antwort nicht im Kontext steht, sage: "Diese Information ist nicht verfügbar."
+        Keine Spekulationen. Keine Ergänzungen aus eigenem Wissen.
+        Antworte auf Deutsch in vollständigen Sätzen.
+      active: true
+
+    - name: "susi_standard"
+      note: "SUSIs aktueller Prompt"
+      text: |
+        Du bist SUSI, Martins persönliche KI-Assistentin.
+        Sprich Martin IMMER mit "du" an.
+        Lies den Kontext vollständig. Antworte NUR daraus.
+        Bei persönlichen Fragen: NUR Kontext, nie erfinden.
+        Bei allgemeinen Fragen: eigenes Wissen erlaubt.
+        Wenn nicht im Kontext: "Dazu fehlt mir noch was in der SUSIpedia!"
+      active: true
+
+    - name: "techniker"
+      note: "Rolle eines Company-Servicetechnikers mit Fachjargon"
+      text: |
+        Du bist ein erfahrener technischer Experte.
+        Antworte präzise mit Fachbegriffen.
+        Strukturiere Antworten mit klaren Schritten wenn nötig.
+        Basiere dich auf den gegebenen Kontext.
+        Antworte auf Deutsch.
+      active: true
+
+    - name: "analytiker"
+      note: "Strukturierte Listen, keine Füllwörter"
+      text: |
+        Du bist ein analytischer Assistent.
+        Antworte strukturiert und ohne Füllwörter.
+        Verwende Aufzählungen für mehrere Punkte.
+        Nur Fakten aus dem Kontext. Keine Interpretationen.
+        Antworte auf Deutsch.
+      active: false
+
+    - name: "einfach"
+      note: "Kundenorientierte, verständliche Sprache"
+      text: |
+        Du bist ein freundlicher Assistent der einfach erklärt.
+        Vermeide Fachbegriffe wo möglich.
+        Erkläre als würdest du jemandem ohne Vorkenntnisse helfen.
+        Basiere dich auf den gegebenen Kontext.
+        Antworte auf Deutsch.
+      active: false
+
+  # Context Window Management
+  # Wie wird der Kontext in den Prompt eingebaut?
+  context_strategy:
+    max_context_chars: 4000    # maximale Zeichen für den Kontext
+    truncate_chunks: true      # Chunks kürzen wenn Context Window voll
+    chunk_separator: "\n\n"    # Trenner zwischen Chunks im Prompt
+
+
+# ══════════════════════════════════════════════════════════════════
+# EVALUIERUNG
+# ══════════════════════════════════════════════════════════════════
+
+evaluation:
+
+  # Bewertungsskala (manuell)
+  score_scale:
+    0: "Falsch — Antwort ist inhaltlich falsch oder halluziniert"
+    1: "Teilweise — Antwort ist teilweise korrekt"
+    2: "Korrekt — Antwort ist vollständig und korrekt"
+
+  # Automatische Metriken (optional)
+  auto_metrics:
+    ragas:
+      enabled: false          # aktivieren wenn ragas installiert ist
+      metrics:
+        - "faithfulness"      # Antwort basiert auf Kontext?
+        - "answer_relevancy"  # Antwort beantwortet die Frage?
+        - "context_recall"    # richtiger Chunk gefunden?
+
+    bert_score:
+      enabled: false          # aktivieren wenn bert-score installiert ist
+      lang: "de"
+
+  # Judge Modell (optional)
+  # Bewertet Antworten automatisch ohne manuelle Skala
+  judge_model:
+    enabled: false
+    model: "claude-sonnet-4-20250514"   # oder "gpt-4o"
+    note: "API-Key nötig, verursacht Kosten"
+
+  # Wie viele Fragen pro Kategorie?
+  questions_per_category: 10
+
+
+# ══════════════════════════════════════════════════════════════════
+# HARDWARE PROFILE
+# Aktiviere das passende Profil für die aktuelle Hardware
+# ══════════════════════════════════════════════════════════════════
+
+hardware_profiles:
+
+  rtx_4070_12gb:
+    active: true
+    vram_gb: 12
+    embedding_device: "cpu"
+    max_llm_size_gb: 10
+    note: "aktuelle Hardware"
+
+  rtx_3090_24gb:
+    active: false
+    vram_gb: 24
+    embedding_device: "cuda"
+    max_llm_size_gb: 22
+    note: "kommt bald"
+
+  dual_rtx_3090_48gb:
+    active: false
+    vram_gb: 48
+    embedding_device: "cuda"
+    max_llm_size_gb: 46
+    note: "Phase 3 Vision"
+    

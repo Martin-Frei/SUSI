@@ -1,0 +1,432 @@
+{% load static %}
+<script src="{% static 'core/js/htmx.min.js' %}" defer></script>
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}SUSI{% endblock %}</title>
+
+
+
+  <!-- Google Fonts: JetBrains Mono + Syne -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    /* ── Design System ─────────────────────────────────── */
+    :root {
+      --bg:        #0a0c10;
+      --bg-panel:  #0f1117;
+      --bg-input:  #161922;
+      --border:    #1e2433;
+      --border-hi: #2e3a52;
+      --accent:    #5b8dee;
+      --accent-dim:#2a4070;
+      --susi:      #3ee8b5;
+      --susi-dim:  #0e3329;
+      --user:      #f0f0f0;
+      --muted:     #818b9e;
+      --error:     #f56565;
+      --text:      #c9d1e0;
+      --text-dim:  #b3b9c3;
+      --font-mono: 'JetBrains Mono', monospace;
+      --font-ui:   'Syne', sans-serif;
+      --radius:    6px;
+      --transition: 180ms ease;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 14px;
+      line-height: 1.6;
+      overflow: hidden;
+    }
+
+    /* ── Layout ─────────────────────────────────────────── */
+    .app {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      grid-template-rows: 48px 1fr;
+      height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────── */
+    .header {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 20px;
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header__logo {
+      font-family: var(--font-ui);
+      font-weight: 800;
+      font-size: 18px;
+      letter-spacing: 0.05em;
+      color: var(--susi);
+    }
+
+    .header__logo span { color: var(--accent); }
+
+    .header__status {
+      font-size: 11px;
+      color: var(--muted);
+      margin-left: auto;
+    }
+
+    .header__status::before {
+      content: '●';
+      color: var(--susi);
+      margin-right: 6px;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────── */
+    .sidebar {
+      background: var(--bg-panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar__section {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar__label {
+      font-family: var(--font-ui);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    /* ── Upload Area ─────────────────────────────────────── */
+    .upload-zone {
+      border: 1px dashed var(--border-hi);
+      border-radius: var(--radius);
+      padding: 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color var(--transition), background var(--transition);
+    }
+
+    .upload-zone:hover,
+    .upload-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(91, 141, 238, 0.05);
+    }
+
+    .upload-zone__icon {
+      font-size: 24px;
+      margin-bottom: 8px;
+      display: block;
+    }
+
+    .upload-zone__text {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .upload-zone__types {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .upload-input { display: none; }
+
+    /* ── Upload Status ───────────────────────────────────── */
+    #upload-status {
+      margin-top: 10px;
+      min-height: 0;
+    }
+
+    /* ── Model Badge ─────────────────────────────────────── */
+    .model-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--bg-input);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      font-size: 11px;
+    }
+
+    .model-badge__dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--susi);
+      flex-shrink: 0;
+    }
+
+    .model-badge__name { color: var(--text-dim); }
+    .model-badge__value { color: var(--susi); margin-left: auto; font-size: 10px; }
+
+    /* ── Chat Area ───────────────────────────────────────── */
+    .chat {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .chat__messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      scroll-behavior: smooth;
+    }
+
+    .chat__messages::-webkit-scrollbar { width: 4px; }
+    .chat__messages::-webkit-scrollbar-track { background: transparent; }
+    .chat__messages::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+
+    /* ── Messages ────────────────────────────────────────── */
+    .msg-pair { display: flex; flex-direction: column; gap: 8px; }
+
+    .msg {
+      max-width: 80%;
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      line-height: 1.7;
+      animation: fadeUp 200ms ease both;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .msg--user {
+      align-self: flex-end;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      color: var(--user);
+    }
+
+    .msg--user::before {
+      content: 'martin › ';
+      color: var(--accent);
+      font-size: 11px;
+      display: block;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+
+    .msg--susi {
+      align-self: flex-start;
+      background: var(--susi-dim);
+      border: 1px solid rgba(62, 232, 181, 0.2);
+      color: var(--text);
+    }
+
+    .msg--susi::before {
+      content: 'SUSI › ';
+      color: var(--susi);
+      font-size: 11px;
+      display: block;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+
+    .msg--error {
+      color: var(--error);
+      background: rgba(245, 101, 101, 0.1);
+      border: 1px solid var(--error);
+      align-self: center;
+      font-size: 12px;
+    }
+
+    /* ── Thinking Indicator ──────────────────────────────── */
+    .thinking {
+      align-self: flex-start;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 16px;
+      background: var(--susi-dim);
+      border: 1px solid rgba(62, 232, 181, 0.15);
+      border-radius: var(--radius);
+      color: var(--susi);
+      font-size: 12px;
+    }
+
+    .thinking__dots {
+      display: flex;
+      gap: 3px;
+    }
+
+    .thinking__dots span {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: bounce 1.2s infinite;
+    }
+
+    .thinking__dots span:nth-child(2) { animation-delay: 0.2s; }
+    .thinking__dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes bounce {
+      0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+      40%           { transform: translateY(-4px); opacity: 1; }
+    }
+
+    /* ── Welcome ─────────────────────────────────────────── */
+    .welcome {
+      align-self: center;
+      text-align: center;
+      margin: auto;
+      color: var(--muted);
+    }
+
+    .welcome__name {
+      font-family: var(--font-ui);
+      font-size: 48px;
+      font-weight: 800;
+      color: var(--susi);
+      opacity: 0.15;
+      letter-spacing: 0.05em;
+      line-height: 1;
+    }
+
+    .welcome__hint {
+      font-size: 12px;
+      margin-top: 8px;
+    }
+
+    /* ── Input Area ──────────────────────────────────────── */
+    .chat__input-area {
+      padding: 16px 32px 20px;
+      border-top: 1px solid var(--border);
+      background: var(--bg);
+    }
+
+    .input-form {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+
+    .input-form__field {
+      flex: 1;
+      background: var(--bg-input);
+      border: 1px solid var(--border-hi);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 14px;
+      resize: none;
+      min-height: 44px;
+      max-height: 160px;
+      transition: border-color var(--transition);
+      overflow-y: auto;
+    }
+
+    .input-form__field:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .input-form__field::placeholder { color: var(--muted); }
+
+    .input-form__btn {
+      flex-shrink: 0;
+      width: 44px;
+      height: 44px;
+      background: var(--accent);
+      border: none;
+      border-radius: var(--radius);
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background var(--transition), transform var(--transition);
+    }
+
+    .input-form__btn:hover { background: #4a7cdc; }
+    .input-form__btn:active { transform: scale(0.95); }
+    .input-form__btn.htmx-request { background: var(--muted); cursor: not-allowed; }
+
+    /* ── Indicator ───────────────────────────────────────── */
+    .htmx-indicator { display: none; }
+    .htmx-request .htmx-indicator { display: flex; }
+    .htmx-request .send-icon { display: none; }
+
+    /* ── Upload Status Styles ────────────────────────────── */
+    .status-msg {
+      font-size: 11px;
+      padding: 8px 10px;
+      border-radius: var(--radius);
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+
+    .status-msg--ok {
+      color: var(--susi);
+      background: var(--susi-dim);
+      border: 1px solid rgba(62,232,181,0.2);
+    }
+
+    .status-msg--err {
+      color: var(--error);
+      background: rgba(245,101,101,0.08);
+      border: 1px solid rgba(245,101,101,0.25);
+    }
+
+    /* ── Progress bar ────────────────────────────────────── */
+    .upload-progress {
+      height: 2px;
+      background: var(--border);
+      border-radius: 1px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+
+    .upload-progress__bar {
+      height: 100%;
+      background: var(--accent);
+      width: 0;
+      animation: progress 1.5s ease-in-out infinite;
+    }
+
+    @keyframes progress {
+      0%   { width: 0;    margin-left: 0; }
+      50%  { width: 60%;  margin-left: 20%; }
+      100% { width: 0;    margin-left: 100%; }
+    }
+  </style>
+
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  {% block body %}{% endblock %}
+</body>
+</html>

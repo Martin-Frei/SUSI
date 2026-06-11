@@ -1,0 +1,64 @@
+# ── Virtual Environment ──────────────────────────────
+susi_env/
+.env
+
+# ── ChromaDB (groß, lokal generiert) ─────────────────
+chroma_db/
+tools/evaluation/chroma_eval/
+tools/evaluation/results/
+
+# ── Python ───────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# ── Modelle / Weights ─────────────────────────────────
+*.bin
+*.safetensors
+*.gguf
+*.pt
+*.pth
+*.sqlite3
+
+# ── OS / IDE ──────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# ── Logs ──────────────────────────────────────────────
+*.log
+logs/
+*.csv
+
+
+
+# ── AUSNAHMEN FÜR DOKUMENTE & WISSEN ──────────────────
+
+# 1. Komplette Doku ignorieren, außer "susi_wissenschaft"
+A_documentation/
+!A_documentation/
+A_documentation/*
+!A_documentation/susi_wissenschaft/
+
+# 2. Komplette SUSIpedia ignorieren, außer "projekte"
+docs/
+!docs/
+docs/*
+!docs/projekte/
+
+
+
+# ── JSON-Schutz: Nur sensible Daten blockieren ────────
+# Blockiert echten Testfragen (wegen privater Inhalte)
+tools/evaluation/testfragen.json
+tools/evaluation/testfragen_big_run.json
+
+# Blockiert alle automatisch generierten Bewertungs-JSONs des Auto-Scorers
+tools/evaluation/results/*.json
+
+# Blockiert lokalen Konfigurations-Müll deiner Editoren
+.vscode/*.json
+.idea/*.json

@@ -1,0 +1,6 @@
+{# Wird von upload_view zurückgegeben #}
+{% if success %}
+  <div class="status-msg status-msg--ok">{{ message }}</div>
+{% else %}
+  <div class="status-msg status-msg--err">{{ message }}</div>
+{% endif %}

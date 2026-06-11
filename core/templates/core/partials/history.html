@@ -1,0 +1,15 @@
+{# Wird von history_view zurückgegeben – ersetzt den gesamten #messages Inhalt #}
+{% if not history %}
+  <div class="welcome">
+    <div class="welcome__name">SUSI</div>
+    <div class="welcome__hint">Frag mich alles aus der SUSIpedia.</div>
+  </div>
+{% else %}
+  {% for entry in history %}
+    {% if entry.role == "user" %}
+      <div class="msg msg--user">{{ entry.content }}</div>
+    {% else %}
+      <div class="msg msg--susi">{{ entry.content|linebreaksbr }}</div>
+    {% endif %}
+  {% endfor %}
+{% endif %}

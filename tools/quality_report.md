@@ -1,0 +1,132 @@
+# SUSI Docs Quality Report
+
+Dateien geprüft: **116**
+
+---
+
+## ❌ Probleme
+
+_Keine Probleme gefunden._
+
+## ⚠️ Warnungen
+
+_Keine Warnungen._
+
+## ✅ OK
+
+- ✅ coding\gmm\architektur.md
+- ✅ coding\gmm\dach_pipeline_13032026.md
+- ✅ coding\gmm\dashboard_v1_13032026.md
+- ✅ coding\gmm\europe_complete_15032026.md
+- ✅ coding\gmm\global_expansion_15032026.md
+- ✅ coding\gmm\klassifikation_deepseek.md
+- ✅ coding\gmm\nightshift_28regions_15032026.md
+- ✅ coding\gmm\progress_13032026.md
+- ✅ coding\gmm\western_europe_v15_14032026.md
+- ✅ coding\houseofstocks\architektur.md
+- ✅ coding\houseofstocks\setup.md
+- ✅ coding\ml_konzepte.md
+- ✅ coding\portfolio\architektur.md
+- ✅ coding\portfolio\components_sidebar_ticker.md
+- ✅ coding\portfolio\integration_dashboard.md
+- ✅ coding\portfolio\model_health.md
+- ✅ coding\portfolio\stock_dashboard.md
+- ✅ coding\portfolio\stock_dashboard_features.md
+- ✅ coding\portfolio\strategy_dashboard.md
+- ✅ coding\portfolio\trading_interface.md
+- ✅ coding\stockpredict\deployment_railway.md
+- ✅ coding\stockpredict\logbuch_08032026_deployment.md
+- ✅ coding\stockpredict\logbuch_08032026_learnings.md
+- ✅ coding\stockpredict\logbuch_08032026_storage.md
+- ✅ coding\stockpredict\logbuch_09032026_erster_alpha_run.md
+- ✅ coding\stockpredict\railway_deployment.md
+- ✅ coding\stockpredict\roadmap_dashboard_integration.md
+- ✅ coding\stockpredict\runbook_daily_pipeline.md
+- ✅ coding\stockpredict\sql_strategy_funktionen.md
+- ✅ coding\stockpredict\transformer_research.md
+- ✅ coding\susi\dgsvo_ki.md
+- ✅ coding\susi\edge_mcp_evaluation.md
+- ✅ coding\susi\evaluation_framework.md
+- ✅ coding\susi\evaluation_plan.md
+- ✅ coding\susi\susi_architektur_entscheidungen.md
+- ✅ coding\susi\susi_ideen_technisch.md
+- ✅ familie\exfrau.md
+- ✅ familie\geschwister.md
+- ✅ familie\martin_soehne.md
+- ✅ hobbys\tanzen.md
+- ✅ job\bewerbungen.md
+- ✅ job\cv_ml.md
+- ✅ job\jobsuche.md
+- ✅ lernen\ai\ai_agents.md
+- ✅ lernen\ai\ai_uebersicht.md
+- ✅ lernen\ai\automatisierung_tools.md
+- ✅ lernen\ai\azure_ai.md
+- ✅ lernen\ai\chromadb_vektoren.md
+- ✅ lernen\ai\dsgvo_ki.md
+- ✅ lernen\ai\llm_grundlagen.md
+- ✅ lernen\ai\mcp_frameworks.md
+- ✅ lernen\ai\mlops_grundlagen.md
+- ✅ lernen\ai\nlp_pipeline.md
+- ✅ lernen\ai\prompt_engineering.md
+- ✅ lernen\ai\spezialisierte_llms.md
+- ✅ lernen\api\api_authentication.md
+- ✅ lernen\api\api_konzepte.md
+- ✅ lernen\api\api_rest_python_aiohttp.md
+- ✅ lernen\api\api_rest_python_requests.md
+- ✅ lernen\api\api_uebersicht.md
+- ✅ lernen\api\api_webhooks.md
+- ✅ lernen\devops\cicd_grundlagen.md
+- ✅ lernen\devops\docker_grundlagen.md
+- ✅ lernen\devops\monitoring.md
+- ✅ lernen\englisch\ai_agents_en.md
+- ✅ lernen\englisch\cv.md
+- ✅ lernen\englisch\llm_grundlagen_en.md
+- ✅ lernen\englisch\ml_stockpredict_en.md
+- ✅ lernen\htmx\htmx_uebersicht.md
+- ✅ lernen\interview\gehaltsvorstellungen.md
+- ✅ lernen\interview\heikle_fragen.md
+- ✅ lernen\interview\karrierewechsel.md
+- ✅ lernen\interview\mock_fragen.md
+- ✅ lernen\interview\truma_interview_preparation.md
+- ✅ lernen\interview\truma_stelle.md
+- ✅ lernen\interview\truma_warum.md
+- ✅ lernen\javascript\api_rest_js_axios.md
+- ✅ lernen\javascript\api_rest_js_fetch.md
+- ✅ lernen\mathe\3b1b_linear_algebra\video01_vektoren.md
+- ✅ lernen\mathe\3b1b_linear_algebra\Video02_span_basis_lineare_abhaengigkeit.md
+- ✅ lernen\ml\ml_grundlagen.md
+- ✅ lernen\ml\ml_stockpredict.md
+- ✅ lernen\python\api_rest_django.md
+- ✅ lernen\python\python_decorators.md
+- ✅ lernen\python\python_pytest_uebersicht.md
+- ✅ lernen\rag\rag_grundlagen.md
+- ✅ lernen\rpa\rpa_uebersicht.md
+- ✅ lernen\susi\susiuebersicht.md
+- ✅ martin\lebenslauf.md
+- ✅ martin\profil.md
+- ✅ martin\ziele_beruf.md
+- ✅ martin\ziele_familie.md
+- ✅ martin\ziele_finanzen.md
+- ✅ martin\ziele_privat.md
+- ✅ projekte\gmm\GMM_01_fetcher.md
+- ✅ projekte\gmm\GMM_02_topic_filter.md
+- ✅ projekte\gmm\GMM_03_sentiment.md
+- ✅ projekte\gmm\GMM_04_aggregator.md
+- ✅ projekte\gmm\GMM_05_supabase_scheduler.md
+- ✅ projekte\gmm\GMM_06_api_sources_models.md
+- ✅ projekte\pc_umbau\Phase1_umbaue_teileliste.md
+- ✅ projekte\spv2\alpha.md
+- ✅ projekte\spv2\enrich_predictions.md
+- ✅ projekte\spv2\enricher.md
+- ✅ projekte\spv2\enricher_lokal.md
+- ✅ projekte\spv2\lstm_refiner_sql.md
+- ✅ projekte\spv2\performance_checker.md
+- ✅ projekte\spv2\simulate_top_n_hg.md
+- ✅ projekte\spv2\supabase_service.md
+- ✅ projekte\spv2\uebersicht.md
+- ✅ projekte\spv2\xgb_refiner.md
+- ✅ projekte\susi.md
+- ✅ skills\linkedin-spv2-post.md
+- ✅ susi_vision.md
+- ✅ technik\rag_einstellungen.md
+- ✅ technik\susi_grenzen_und_roadmap.md

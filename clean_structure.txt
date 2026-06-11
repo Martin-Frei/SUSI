@@ -1,0 +1,56 @@
+﻿Stock_prediction/
+│
+│
+├── A_documentation/
+│   ├── 2026-03-21_susi_development_docs_EN.md
+│   ├── 2026-03-21_susi_entwichlung_docs.md
+│   ├── 2026-03-21_susi_grenzen_erfahrungen.md
+│   └── adeena.md
+├── chroma_db/
+│   ├── 62bcbe86-adbe-44f3-8745-d0f4aa90bcc4/
+│   ├── chroma.sqlite3
+│   └── doc_hashes.json
+├── core/
+│   ├── admin.py
+│   ├── apps.py
+│   ├── models.py
+│   ├── tests.py
+│   ├── views.py
+│   └── __init__.py
+├── docs/
+│   ├── coding/
+│   ├── familie/
+│   ├── finanzen/
+│   ├── freunde/
+│   ├── hobbys/
+│   ├── job/
+│   ├── lernen/
+│   ├── martin/
+│   ├── persoenlich/
+│   ├── projekte/
+│   ├── tagebuch/
+│   ├── technik/
+│   ├── wohnen/
+│   └── susi_vision.md
+├── rag/
+│   ├── admin.py
+│   ├── apps.py
+│   ├── ingest.py
+│   ├── models.py
+│   ├── query.py
+│   ├── tests.py
+│   ├── views.py
+│   └── __init__.py
+├── susi_env/
+│   ├── Include/
+│   ├── Lib/
+│   ├── Scripts/
+│   ├── share/
+│   ├── .gitignore
+│   └── pyvenv.cfg
+└── susi_project/
+    ├── asgi.py
+    ├── settings.py
+    ├── urls.py
+    ├── wsgi.py
+    └── __init__.py

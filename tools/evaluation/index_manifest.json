@@ -1,0 +1,16 @@
+{
+  "erstellt": "2026-06-10T16:17:47.562494",
+  "collections": [
+    {
+      "status": "built",
+      "collection": "susi_eval_bge-m3_c1000_o50_default",
+      "chunks": 751,
+      "files": 123,
+      "errors": [],
+      "embedding_model": "bge-m3",
+      "chunk_size": 1000,
+      "overlap": 50,
+      "separator": "default"
+    }
+  ]
+}
