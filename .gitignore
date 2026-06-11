@@ -51,6 +51,11 @@ docs/*
 
 
 
+A_documentation/susi_wissenschaft/susi_ToDO_liste.md
+A_documentation/susi_wissenschaft/susi_bwertungsskala.md
+
+
+
 # ── JSON-Schutz: Nur sensible Daten blockieren ────────
 # Blockiert echten Testfragen (wegen privater Inhalte)
 tools/evaluation/testfragen.json
