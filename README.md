@@ -1,9 +1,5 @@
 # SUSI – Selbständige und Schlaue Intelligenzbestie
-<div align="right">
 
-![Profile Views](https://komarev.com/ghpvc/?username=Martin-Frei&color=blue&style=for-the-badge)
-
-</div>
 
 > Vollständig lokaler, datenschutzkonformer KI-Assistent mit RAG-Wissensbasis.  
 > Kein einziges Byte verlässt den lokalen Rechner.
