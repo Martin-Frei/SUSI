@@ -30,7 +30,7 @@ Die Ausgangsfrage für SUSI war deshalb nicht *"Wie baue ich den besten Chatbot?
 
 > *"Wie baue ich einen KI-Assistenten, der alles lokal verarbeitet, nichts nach außen sendet, und trotzdem mit der Zeit immer smarter wird?"*
 
-→ *Details: [susi_01_Motivation.md](01_Motivation.md)*
+→ *Details: [susi_01_Motivation.md](susi_01_motivation.md)*
 
 ---
 
@@ -54,7 +54,7 @@ Alle Komponenten laufen auf der eigenen Hardware. Kein einziger Byte verlässt d
 
 Der Stack hat sich über mehrere Iterationen entwickelt — von einem einfachen Skript zu einem vollständigen Django-Backend mit HTMX-Frontend, differenzieller Ingestion-Pipeline und formalem Evaluierungsframework.
 
-→ *Details: [susi_02_Architektur.md](02_Architektur.md)*
+→ *Details: [susi_02_Architektur.md](susi_02_architektur.md)*
 
 ---
 
@@ -66,7 +66,7 @@ Eine der wichtigsten praktischen Erkenntnisse aus dem Aufbau der Wissensbasis wa
 
 Diese Erkenntnis hat die gesamte Dokumentationspraxis verändert. Jede neue Datei folgt seitdem einem definierten Format das auf optimales Retrieval ausgelegt ist — nicht auf menschliche Lesbarkeit.
 
-→ *Details: [susi_03_SUSIpedia.md](03_SUSIpedia.md)*
+→ *Details: [susi_03_SUSIpedia.md](susi_03_susipedia.md)*
 
 ---
 
@@ -82,7 +82,7 @@ Das Framework misst auf zwei Ebenen:
 
 Die Kombination beider Ebenen macht sichtbar wo ein Problem wirklich liegt — im Retrieval oder in der Generierung. Das ist der Unterschied zwischen systematischer Optimierung und Raten.
 
-→ *Details: [susi_04_Evaluation.md](04_Evaluation.md)*
+→ *Details: [susi_04_Evaluation.md](susi_04_evaluation.md)*
 
 ---
 
@@ -102,7 +102,7 @@ Im Verlauf der Entwicklung wurden vier Architekturansätze identifiziert und bew
 
 Die Lösung ist eine **3-stufige Architektur mit Human-in-the-Loop**: Kurzzeitgedächtnis → automatisierter Türsteher (Cross-Encoder) → asynchrones Review-Dashboard. Die KI schreibt Entwürfe vor, der Mensch behält die Datenhoheit.
 
-→ *Details: [susi_05_Sackgassen_und_neue_Architektur.md](05_Sackgassen_und_neue_Architektur.md)*
+→ *Details: [susi_05_Sackgassen_und_neue_Architektur.md](susi_05_sackgassen.md)*
 
 ---
 
@@ -120,7 +120,7 @@ SUSI ist kein GPT-4-Ersatz. Das war nie das Ziel.
 
 SUSI und externe KI-Assistenten sind komplementär, nicht kompetitiv. Die Kombination ist stärker als jedes einzelne System.
 
-→ *Details: [susi_06_Grenzerfahrungen.md](06_Grenzerfahrungen.md)*
+→ *Details: [susi_06_Grenzerfahrungen.md](susi_06_grenzerfahrungen.md)*
 
 ---
 
@@ -138,7 +138,7 @@ Vollständige Integration privater und beruflicher Wissensbasis. SUSI als proakt
 **Geschäftspotenzial:**  
 Die Architektur ist nicht nur für den persönlichen Einsatz gedacht. Lokale, DSGVO-konforme RAG-Assistenten für mittelständische Unternehmen — als Alternative zu Microsoft Copilot für Firmen die ihre Daten nicht in die Cloud geben wollen oder dürfen. Der Kerngedanke — die Wissensbasis als dauerhaft eigenes Asset — ist für Unternehmen strategisch attraktiv.
 
-→ *Details: [susi_07_Roadmap_und_Geschaeftspotenzial.md](07_Roadmap_und_Geschaeftspotenzial.md)*
+→ *Details: [susi_07_Roadmap_und_Geschaeftspotenzial.md](susi_07_roadmap.md)*
 
 ---
 
