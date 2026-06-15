@@ -1,0 +1,12 @@
+# SUSI — evaluation / dev extras (tools/evaluation).
+# Installs the runtime deps plus the scoring + plotting stack used by the
+# RAG evaluation pipeline (BERTScore, ROUGE, CSV analysis, charts).
+#
+# Install:  pip install -r requirements-eval.txt
+
+-r requirements.txt
+
+bert-score==0.3.13
+pandas==3.0.2
+matplotlib==3.10.9
+numpy==2.4.3
