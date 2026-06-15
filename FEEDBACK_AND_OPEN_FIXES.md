@@ -1,90 +1,116 @@
-# Feedback & offene Punkte
+# Feedback & offene Punkte für SUSI
 
-Stand: 2026-06-15 · Branch `feature/rag-core-and-web-fixes`
+Hi Martin,
 
-Dieses Dokument fasst zusammen, was auf diesem Branch behoben wurde und – vor
-allem – was **bewusst offen gelassen** wurde und warum. Es ist als Übergabe an
-den Maintainer gedacht.
+Markus hat mich (Claude) gebeten, einmal als Senior-Dev/AI-Architekt über dein
+SUSI-Projekt zu schauen und die Punkte aus dem Review gleich umzusetzen. Vorweg:
+Das Projekt ist konzeptionell richtig stark – besonders dein Eval-Framework
+(Grid-Search mit BERTScore/ROUGE, ~29% → ~97%) ist etwas, das viele „echte"
+Teams nicht hinbekommen. Das hier ist also kollegiales Feedback unter
+AI-Leuten, kein Verriss.
+
+Ich hab auf dem Branch `feature/rag-core-and-web-fixes` aufgeräumt. Unten steht,
+**was ich angefasst habe** und – wichtiger – **was ich bewusst liegen gelassen
+habe und warum**, damit du selbst entscheiden kannst.
+
+Stand: 2026-06-15
 
 ---
 
-## Was behoben wurde (6 Commits)
+## Was ich behoben habe (6 Commits)
 
 | Commit | Inhalt |
 |---|---|
-| `Make the RAG core reusable and unit-testable` | `ask_susi()` bekam echte Parameter, Heavy-Imports (langchain/chromadb) sind jetzt **lazy**, DB wird gecacht, `worth_saving`-Substring-Bug gefixt, Debug-Prints/toter Code/Typo entfernt. |
-| `Add susi_config.yaml as the single source for sidebar + prompts` | Fehlende `get_frontend_config()` + `susi_config.yaml` ergänzt; Prompt-Registry inkl. `praezise_cot`. |
-| `Wire the web layer to the real RAG API` | `importlib`-Hack und `subprocess`-Ingest raus, echte Imports rein. **Das Web-Frontend funktioniert wieder.** |
+| `Make the RAG core reusable and unit-testable` | `ask_susi()` hat jetzt echte Parameter, die Heavy-Imports (langchain/chromadb) sind **lazy**, die DB wird gecacht, dein `worth_saving`-Substring-Bug ist gefixt, Debug-Prints/toter Code/Typo raus. |
+| `Add susi_config.yaml as the single source for sidebar + prompts` | Die fehlende `get_frontend_config()` + `susi_config.yaml` ergänzt; Prompt-Registry inkl. deinem `praezise_cot` aus der Eval. |
+| `Wire the web layer to the real RAG API` | Den `importlib`-Hack und das `subprocess`-Ingest rausgeworfen, echte Imports rein. **Damit läuft dein Web-Frontend wieder.** |
 | `Persist chat history in the database instead of a global dict` | `ChatMessage`-Modell statt prozess-globalem Dict; pro Session isoliert, übersteht Neustarts. |
-| `Harden file upload against path traversal` | `_safe_filename()` verhindert Ausbruch aus dem Upload-Verzeichnis. |
-| `Split requirements into a curated list, eval extras and a lock` | `requirements.txt` von 168 Paketen (UTF-16, inkl. `anthropic`) auf ~8 echte Direkt-Deps reduziert; Full-Freeze als Lockfile erhalten. |
+| `Harden file upload against path traversal` | `_safe_filename()` verhindert, dass ein Upload aus dem Verzeichnis ausbricht. |
+| `Split requirements into a curated list, eval extras and a lock` | `requirements.txt` von 168 Paketen (UTF-16, inkl. `anthropic`) auf ~8 echte Direkt-Deps reduziert; deinen Full-Freeze hab ich als Lockfile aufgehoben. |
 
 Verifikation: ruff-F clean, 17 pytest-Tests grün, 2 Django-DB-Tests grün, keine
-fehlenden Migrationen, `manage.py check` sauber. Plan + Specs liegen in `tasks/`.
+fehlenden Migrationen, `manage.py check` sauber. Den ganzen Plan + die Specs
+findest du in `tasks/`, falls du nachvollziehen willst, wie ich vorgegangen bin.
+
+> **Der wichtigste Punkt:** Dein Web-Frontend war effektiv tot – `views.py` rief
+> `ask_susi()` mit `top_k`, `temperature` usw. auf, aber die Funktion nahm nur
+> ein Argument. Jede Web-Anfrage lief in den `except` und gab `[SUSI Fehler]`
+> zurück. Die CLI lief, das Web nicht. Das war ein auseinandergelaufener
+> Code-Stand, kein Designfehler – passiert jedem. Jetzt teilen sich CLI und
+> Django denselben Kern.
 
 ---
 
-## Offen gelassen – und warum
+## Was ich bewusst liegen gelassen habe – und warum
 
-### 1. Self-write-Gedächtnis ohne Pflicht-Review (mittlere Priorität)
+Das hier ist kein Versäumnis, sondern Absicht. Ich wollte eine fokussierte
+Fix-Serie abliefern und nicht in deinem Projekt herumdesignen.
+
+### 1. Dein Self-write-Gedächtnis hat keinen Pflicht-Review (mittlere Priorität)
 SUSI schreibt LLM-Zusammenfassungen zurück in die SUSIpedia und liest sie beim
-nächsten Lauf wieder ein. Das ist eine **Feedback-Schleife, die Halluzinationen
-verfestigen kann** – modellgenerierter Text wird zur „Quelle der Wahrheit".
+nächsten Lauf wieder ein. Pass auf: Das ist eine **Feedback-Schleife, die
+Halluzinationen verfestigen kann** – einmal falsch zusammengefasst, wird der
+Text zur „Quelle der Wahrheit" und taucht im Retrieval wieder auf.
 
-*Warum nicht angefasst:* Das ist ein **Feature-Redesign**, kein Bugfix. Es
-bräuchte einen verpflichtenden Human-in-the-loop-Review vor dem Persistieren
-(in der CLI gibt es ihn ansatzweise über den Speicher-Dialog, im Web fehlt er
-ganz). Gehört in einen eigenen, bewusst designten Increment statt in eine
-Aufräum-Runde.
+*Warum ich es nicht angefasst habe:* Das ist ein **Feature-Redesign**, kein
+Bugfix. Du bräuchtest einen verpflichtenden Human-in-the-loop-Check vor dem
+Speichern (in der CLI hast du ihn ansatzweise über den Speicher-Dialog, im Web
+fehlt er komplett). Das gehört in einen eigenen, bewusst gebauten Increment –
+da wollte ich dir nicht reinpfuschen.
 
 ### 2. `DEBUG = True` / hartkodierter `SECRET_KEY` / `ALLOWED_HOSTS = []`
-*Warum nicht angefasst:* Für den aktuellen **rein lokalen** Single-User-Betrieb
-unkritisch. Das wird erst relevant, sobald SUSI über das Netz erreichbar ist
-(geplante Raspberry-Pi-/Gesichtserkennungs-Stufe). Dann braucht es:
+*Warum nicht angefasst:* Für deinen aktuellen **rein lokalen** Single-User-Betrieb
+ist das unkritisch. Relevant wird es, sobald SUSI übers Netz erreichbar ist
+(deine geplante Raspberry-Pi-/Gesichtserkennungs-Stufe). Dann brauchst du:
 `DEBUG=False`, `SECRET_KEY` aus einer Env-Variable, gesetzte `ALLOWED_HOSTS` und
-eine echte Authentifizierung. Sollte zusammen mit dem Deployment-Schritt
-gemacht werden, nicht vorgezogen werden.
+echte Auth. Mach das zusammen mit dem Deployment-Schritt – vorziehen bringt nichts.
 
-### 3. Synchroner Ingest blockiert den Web-Request
+### 3. Der Ingest blockiert weiterhin den Web-Request
 `_ingest_file` / `save_to_susipedia` rufen `ingest_docs()` jetzt direkt auf (statt
-fragiler `subprocess`-Variante) – aber weiterhin **synchron**. Bei großen Uploads
-wartet der HTTP-Request, bis die Indexierung fertig ist.
+deiner fragilen `subprocess`-Variante), aber immer noch **synchron**. Bei großen
+Uploads wartet der HTTP-Request, bis die Indexierung durch ist.
 
-*Warum nicht angefasst:* Echte Lösung wäre ein Task-Queue/Background-Worker
-(z.B. Django-Q, Celery oder ein Thread). Das ist neue Infrastruktur und für den
-lokalen Einzelnutzer aktuell verschmerzbar. Der vorherige `subprocess`-Aufruf
-blockierte übrigens genauso – wir haben es also nicht verschlechtert, nur die
+*Warum nicht angefasst:* Die saubere Lösung wäre ein Background-Worker
+(Django-Q, Celery oder ein simpler Thread). Das ist neue Infrastruktur und für
+den lokalen Einzelnutzer aktuell verschmerzbar. Wichtig: dein `subprocess`-Aufruf
+blockierte vorher genauso – ich hab es also nicht verschlechtert, nur die
 Interpreter-/CWD-Bugs beseitigt.
 
 ### 4. Keine Authentifizierung
-Jeder mit Zugriff auf den Port kann SUSI befragen und Dateien hochladen.
-*Warum nicht angefasst:* Gleiche Begründung wie #2 – lokal okay, gehört zum
-Netz-/Deployment-Thema.
+Wer den Port erreicht, kann SUSI befragen und Dateien hochladen. Gleiche
+Begründung wie #2 – lokal okay, gehört zum Netz-/Deployment-Thema.
 
 ### 5. Kosmetik / Altlasten (niedrige Priorität)
-Bewusst **nicht** angefasst, weil harmlos und nicht den Aufwand wert:
-- `clean_structure.txt` zeigt noch den alten Root-Namen `Stock_prediction/`.
+Bewusst **nicht** angefasst, weil harmlos und in der fokussierten Serie nur
+Rauschen gewesen wäre:
+- `clean_structure.txt` zeigt noch deinen alten Root-Namen `Stock_prediction/`.
 - Hartkodierte Pfade (`C:\Users\tsinn\...`) in README / Eval-Docs.
 - Leere Django-Boilerplate-Stubs mit ungenutzten Imports (`core/admin.py`,
   `rag/admin.py`, `rag/views.py`, `rag/models.py`, die `tests.py`-Reste) – ruff
-  meldet hier noch F401-Findings.
+  meldet hier noch F401.
 - `susi_project/settings.py`: ungenutzter `import os` und ein doppeltes
   `BASE_DIR =` (Zeile 17 und 126).
-- README-Embedding-Widerspruch: Text nennt `nomic-embed-text`, die Eval kürt
-  `bge-m3` als Sieger. Code nutzt weiterhin `nomic-embed-text`.
+- Kleiner Widerspruch: README/Code nutzen `nomic-embed-text`, deine Eval kürt
+  aber `bge-m3` als Sieger. Wenn die Eval stimmt, solltest du auf `bge-m3`
+  umstellen (oder umgekehrt dokumentieren, warum nicht).
 
-*Warum nicht angefasst:* Reine Doku-/Stub-Kosmetik ohne Funktionswirkung. Lässt
-sich in 10 Minuten am Stück machen, wenn gewünscht – wäre aber Rauschen in
-dieser fokussierten Fix-Serie gewesen.
+*Warum nicht angefasst:* Reine Doku-/Stub-Kosmetik ohne Funktionswirkung. Das
+machst du in 10 Minuten am Stück, wenn du magst.
 
 ---
 
-## Hinweise zum Branch
+## Praktisches zum Branch
 
-- **Nicht gemergt, nicht gepusht.** Merge nach `main` ist eine bewusste
-  Maintainer-Entscheidung.
-- Der Gate lief in einem isolierten venv (`.delegate_venv`, git-ignoriert) mit
-  nur Django + pytest + ruff + PyYAML + pytz – **ohne** langchain/chromadb/ollama.
-  Dass die Tests dort laufen, ist der Beweis, dass die Lazy-Imports greifen.
-- Vor dem ersten echten Lauf: `pip install -r requirements.txt` und sicherstellen,
-  dass Ollama mit `qwen2.5-coder:7b` + `nomic-embed-text` läuft.
+- **Nichts gemergt, nichts gepusht.** Das ist deine Entscheidung – schau dir die
+  Commits in Ruhe an.
+- Ich hab den Test-Gate in einem isolierten venv laufen lassen, das **nur**
+  Django + pytest + ruff + PyYAML + pytz hatte – **ohne** langchain/chromadb/ollama.
+  Dass die Tests dort grün sind, ist der Beweis, dass die Lazy-Imports greifen
+  (vorher war dein `query.py` ohne den kompletten Stack gar nicht importierbar).
+- Vor dem ersten echten Lauf: `pip install -r requirements.txt` und Ollama mit
+  `qwen2.5-coder:7b` + `nomic-embed-text` starten.
+
+Viel Erfolg mit SUSI – und Respekt für die Eval-Disziplin, das hebt das Projekt
+deutlich über „noch ein RAG-Tutorial" hinaus.
+
+– Claude (im Auftrag von Markus)
