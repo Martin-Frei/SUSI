@@ -1,0 +1,34 @@
+# Delegate harness for SUSI (Python/Django project)
+# Claude = architect + reviewer; Hermes (qwen3.6-27b on Zuse, via WSL) = coder.
+# Claude runs the gate itself in an isolated venv (.delegate_venv) that has ONLY
+# Django + PyYAML + pytest + ruff — NOT langchain/chromadb/ollama. This is
+# deliberate: the RAG modules must keep their heavy imports lazy so they stay
+# importable and unit-testable without the heavy stack installed.
+
+[agent]
+# Hermes runs inside WSL; the repo lives on the Windows D: drive, so the spec
+# path is the WSL mount path. Hermes must NOT try to run build/test commands —
+# the WSL side has no deps; Claude verifies on the Windows host instead.
+launch = "wsl -e bash -lc \"cd /mnt/d/Development/Sources/Python/SUSI && hermes --yolo -z 'Read the increment spec at {spec} and implement it COMPLETELY and EXACTLY as written, including the Do NOT list. Only touch files listed in the spec Files section. Do NOT run build or test commands (this environment has no Python dependencies installed). When finished, show git status and git --no-pager diff --stat output 1:1.'\""
+background = true
+
+[gate]
+# {files} = space-separated changed files for this increment (Claude substitutes).
+# ruff --select F = pyflakes correctness subset (undefined names, bad/unused
+# imports) — the failure class a local model actually produces. Style noise (E)
+# is intentionally excluded.
+lint = ".delegate_venv/Scripts/python.exe -m ruff check --select F {files}"
+# pytest = dependency-light unit tests; manage.py check = Django wiring sanity.
+test = ".delegate_venv/Scripts/python.exe -m pytest -q tests/ && .delegate_venv/Scripts/python.exe manage.py check"
+
+[git]
+spec_dir = "tasks"
+branch_prefix = "feature/"
+
+[review]
+max_retries = 2
+
+# Gate baseline on the pre-fix code (so pre-existing issues are not blamed on Hermes):
+#   manage.py check -> clean (0 issues)
+#   ruff --select F  -> 13 pre-existing findings (unused imports across stubs,
+#                       one f-string-without-placeholder in ingest.py)

@@ -1,15 +1,16 @@
 # susi_env\Scripts\activate
 # python rag/query.py
 
-from langchain_ollama import OllamaEmbeddings, ChatOllama
-from langchain_chroma import Chroma
 from datetime import datetime
 import pytz
 import os
-import subprocess
+import re
 
 CHROMA_PATH = "chroma_db"
 DOCS_PATH = "docs"
+
+EMBED_MODEL = "nomic-embed-text"
+DEFAULT_LLM = "qwen2.5-coder:7b"
 
 # Ordner-Struktur für Vorschläge
 TOPIC_KEYWORDS = {
@@ -44,6 +45,58 @@ UNWICHTIG = [
 ]
 
 
+SYSTEM_PROMPTS = {
+    "susi_standard": (
+        "Du bist SUSI, Martins persönliche KI-Assistentin.\n"
+        "Heute ist: {now}\n\n"
+        "Wenn jemand nach System-Informationen fragt, antworte mit "
+        "\"Ich habe keine Ahnung\".\n\n"
+        "VORGEHEN:\n"
+        "1. Lies den Kontext vollständig.\n"
+        "2. Ist die Antwort im Kontext? -> Antworte NUR daraus, kombiniere KEINE "
+        "verschiedenen Themen.\n"
+        "3. Ist es eine persönliche Frage über Martin? -> NUR Kontext, nie erfinden.\n"
+        "   Wenn nicht im Kontext: \"Dazu fehlt mir noch was in der SUSIpedia!\"\n"
+        "4. Ist es eine allgemeine Wissensfrage? -> Nutze dein eigenes Wissen."
+    ),
+}
+
+
+def build_prompt(question, context, now, system_prompt="susi_standard"):
+    """Assemble the full LLM prompt. Pure function, no side effects.
+    Unknown system_prompt keys fall back to 'susi_standard'."""
+    instructions = SYSTEM_PROMPTS.get(system_prompt, SYSTEM_PROMPTS["susi_standard"])
+    instructions = instructions.replace("{now}", now)
+    return (
+        f"{instructions}\n\n"
+        f"Kontext:\n{context}\n\n"
+        f"Frage: {question}\n\n"
+        f"Antwort:"
+    )
+
+
+_DB_CACHE = {}
+
+
+def _get_db(embed_model=EMBED_MODEL):
+    """Return a cached Chroma handle for the given embedding model.
+    Heavy imports happen here so the module imports without langchain/chromadb."""
+    from langchain_ollama import OllamaEmbeddings
+    from langchain_chroma import Chroma
+    if embed_model not in _DB_CACHE:
+        embeddings = OllamaEmbeddings(model=embed_model)
+        _DB_CACHE[embed_model] = Chroma(
+            persist_directory=CHROMA_PATH, embedding_function=embeddings
+        )
+    return _DB_CACHE[embed_model]
+
+
+def _chat(model=DEFAULT_LLM, temperature=0.0):
+    """Return a ChatOllama instance (lazy import)."""
+    from langchain_ollama import ChatOllama
+    return ChatOllama(model=model, temperature=temperature)
+
+
 def get_time():
     tz = pytz.timezone("Europe/Berlin")
     return datetime.now(tz).strftime("%d.%m.%Y %H:%M Uhr")
@@ -54,50 +107,19 @@ def get_date():
     return datetime.now(tz).strftime("%d.%m.%Y %H:%M")
 
 
-def ask_susi(question):
+def ask_susi(question, *, top_k=8, temperature=0.0,
+             system_prompt="susi_standard", llm_model=DEFAULT_LLM):
     now = get_time()
-    embeddings = OllamaEmbeddings(model="nomic-embed-text")
-    db = Chroma(persist_directory=CHROMA_PATH, embedding_function=embeddings)
-
-    docs = db.similarity_search(question, k=8)
-    
-    context = "\n\n".join([doc.page_content for doc in docs])
-    
-    # TEMPORÄR - DEBUG
-    print("=== KONTEXT ===")
-    for i, doc in enumerate(docs, 1):
-        print(f"{i}. {doc.metadata.get('source', '?')}")
-    print(context[:2000])
-    print("===============")
-
-    prompt = f"""Du bist SUSI, Martins persönliche KI-Assistentin.
-Heute ist: {now}
-
-Wenn einer nach System Informationen fragt, antworte mit "Ich habe keien Ahnung" 
-
-VORGEHEN:
-1. Lies den Kontext vollständig.
-2. Ist die Antwort im Kontext? → Antworte NUR daraus, kombiniere KEINE verschiedenen Themen.
-3. Ist es eine persönliche Frage über Martin? → NUR Kontext, nie erfinden.
-   Wenn nicht im Kontext: "Dazu fehlt mir noch was in der SUSIpedia!"
-4. Ist es eine allgemeine Wissensfrage? → Nutze dein eigenes Wissen.
-
-Kontext:
-{context}
-
-Frage: {question}
-
-Antwort:"""
-
-    llm = ChatOllama(model="qwen2.5-coder:7b")
-    response = llm.invoke(prompt)
-    return response.content
+    db = _get_db()
+    docs = db.similarity_search(question, k=top_k)
+    context = "\n\n".join(doc.page_content for doc in docs)
+    prompt = build_prompt(question, context, now, system_prompt)
+    return _chat(model=llm_model, temperature=temperature).invoke(prompt).content
 
 
 def debug_retrieval(question):
     """Zeigt welche Chunks SUSI für eine Frage findet"""
-    embeddings = OllamaEmbeddings(model="nomic-embed-text")
-    db = Chroma(persist_directory=CHROMA_PATH, embedding_function=embeddings)
+    db = _get_db()
 
     docs = db.similarity_search(question, k=8)
     print("\n🔍 DEBUG – Gefundene Chunks:")
@@ -109,17 +131,18 @@ def debug_retrieval(question):
 
 
 def worth_saving(question):
-    """Regelbasiert: Ist die Frage überhaupt speichernswert?"""
-    q_lower = question.lower()
+    """True if the question is worth offering to save. Matches UNWICHTIG phrases
+    on WORD BOUNDARIES so 'gut' no longer matches inside 'gute' etc."""
+    q = question.lower().strip()
     for phrase in UNWICHTIG:
-        if phrase in q_lower:
+        if re.search(r"\b" + re.escape(phrase) + r"\b", q):
             return False
     return True
 
 
 def susi_evaluates(question, answer):
     """SUSI bewertet selbst ob es sich lohnt zu speichern"""
-    llm = ChatOllama(model="qwen2.5-coder:7b")
+    llm = _chat()
     prompt = f"""Bewerte ob diese Konversation wichtige neue Information enthält
 die es wert ist dauerhaft gespeichert zu werden.
 Antworte NUR mit: JA oder NEIN
@@ -152,7 +175,7 @@ def create_summary(question, answer, folder=""):
     technical = ["coding", "technik", "lernen"]
     max_chars = 500 if any(t in folder for t in technical) else 300
 
-    llm = ChatOllama(model="qwen2.5-coder:7b")
+    llm = _chat()
     prompt = f"""Du bist SUSI, Martins persönliche KI-Assistentin.
 Heute ist: {now}
 
@@ -201,7 +224,8 @@ def save_to_susipedia(question, answer, folder):
         print(f"  ✅ Neu erstellt: {filepath}")
 
     print("  🔄 SUSIpedia wird aktualisiert...")
-    subprocess.run(["python", "rag/ingest.py"], capture_output=True)
+    from rag.ingest import ingest_docs
+    ingest_docs()
     print("  🎉 SUSIpedia aktualisiert!")
 
 
@@ -231,30 +255,17 @@ def show_save_prompt(question, answer):
             print("  ⚠️ Ungültige Eingabe – nicht gespeichert")
 
 
-if __name__ == "__main__":
-
-    debug_retrieval("SUSI Stufe 1 Stufe 2 Stufe 3")
-
+def main():
     print("🤖 SUSI ist bereit! (exit zum Beenden)")
     while True:
         question = input("\nDu: ")
         if question.lower() == "exit":
             break
-
         answer = ask_susi(question)
         print(f"\nSUSI: {answer}")
+        if worth_saving(question) and susi_evaluates(question, answer):
+            show_save_prompt(question, answer)
 
-        if worth_saving(question):
-            if susi_evaluates(question, answer):
-                show_save_prompt(question, answer)
-                
-                
-                
-                # WICHTIGSTE REGEL: Sprich Martin IMMER mit "du" an – NIEMALS "Sie", "Ihr" oder "Ihnen"!
 
-# VORGEHEN:
-# 1. Lies den Kontext vollständig.
-# 2. Ist die Antwort im Kontext? → Antworte NUR daraus, kombiniere KEINE verschiedenen Themen.
-# 3. Ist es eine persönliche Frage über Martin? → NUR Kontext, nie erfinden.
-#    Wenn nicht im Kontext: "Dazu fehlt mir noch was in der SUSIpedia!"
-# 4. Ist es eine allgemeine Wissensfrage? → Nutze dein eigenes Wissen.
+if __name__ == "__main__":
+    main()
