@@ -2,8 +2,7 @@
 
 Hi Martin,
 
-Markus hat mich (Claude) gebeten, einmal als Senior-Dev/AI-Architekt über dein
-SUSI-Projekt zu schauen und die Punkte aus dem Review gleich umzusetzen. Vorweg:
+Vorweg:
 Das Projekt ist konzeptionell richtig stark – besonders dein Eval-Framework
 (Grid-Search mit BERTScore/ROUGE, ~29% → ~97%) ist etwas, das viele „echte"
 Teams nicht hinbekommen. Das hier ist also kollegiales Feedback unter
@@ -112,5 +111,3 @@ machst du in 10 Minuten am Stück, wenn du magst.
 
 Viel Erfolg mit SUSI – und Respekt für die Eval-Disziplin, das hebt das Projekt
 deutlich über „noch ein RAG-Tutorial" hinaus.
-
-– Claude (im Auftrag von Markus)
