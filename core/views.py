@@ -1,16 +1,10 @@
-from django.shortcuts import render
-
-# Create your views here.
-import os
 import shutil
-import subprocess
 from pathlib import Path
 
 from django.conf import settings
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
-from django.views.decorators.csrf import csrf_exempt
 
 # ── In-Memory Konversations-History (pro Session) ────────────────────────────
 _conversation_store: dict[str, list] = {}
@@ -34,18 +28,11 @@ def _add_to_history(request, role: str, content: str):
 # ── Hilfsfunktion: SUSI befragen ─────────────────────────────────────────────
 def _ask_susi(question: str, top_k=8, temperature=0.0,
               system_prompt="susi_standard", llm_model="qwen2.5-coder:7b") -> str:
-    """
-    Ruft ask_susi() aus rag/query.py auf.
-    Alle Parameter werden aus der Session übergeben.
-    """
+    """Call ask_susi() from rag.query. Import is lazy so a missing heavy stack
+    fails gracefully instead of breaking Django startup."""
     try:
-        import importlib.util
-
-        rag_path = Path(settings.BASE_DIR) / "rag" / "query.py"
-        spec = importlib.util.spec_from_file_location("rag.query", rag_path)
-        rag = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(rag)
-        return rag.ask_susi(
+        from rag.query import ask_susi
+        return ask_susi(
             question,
             top_k=top_k,
             temperature=temperature,
@@ -58,17 +45,12 @@ def _ask_susi(question: str, top_k=8, temperature=0.0,
 
 # ── Hilfsfunktion: Frontend-Config laden ─────────────────────────────────────
 def _get_frontend_config() -> dict:
-    """Lädt Parameter-Config aus susi_config.yaml via query.py"""
+    """Load parameter config from susi_config.yaml via rag.query."""
     try:
-        import importlib.util
-
-        rag_path = Path(settings.BASE_DIR) / "rag" / "query.py"
-        spec = importlib.util.spec_from_file_location("rag.query", rag_path)
-        rag = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(rag)
-        return rag.get_frontend_config()
+        from rag.query import get_frontend_config
+        return get_frontend_config()
     except Exception:
-        # Fallback wenn YAML nicht geladen werden kann
+        # Fallback if the YAML cannot be loaded
         return {
             "llm_options":         [{"name": "Qwen 2.5 Coder 7B", "model": "qwen2.5-coder:7b"}],
             "prompt_options":      [{"name": "susi_standard", "label": "SUSI Standard"}],
@@ -94,20 +76,12 @@ def _ingest_file(filepath: str) -> tuple[bool, str]:
         dest_path = dest_dir / filename
         shutil.copy2(filepath, dest_path)
 
-        result = subprocess.run(
-            ["python", str(Path(settings.BASE_DIR) / "rag" / "ingest.py")],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
+        # Direct call instead of `subprocess.run(["python", "rag/ingest.py"])`:
+        # the subprocess used the wrong interpreter and depended on the cwd.
+        from rag.ingest import ingest_docs
+        ingest_docs()
 
-        if result.returncode == 0:
-            return True, f"✅ '{filename}' erfolgreich indexiert und ab sofort befragbar."
-        else:
-            return False, f"⚠️ Indexierung fehlgeschlagen: {result.stderr[:200]}"
-
-    except subprocess.TimeoutExpired:
-        return False, "⚠️ Indexierung hat zu lange gedauert (Timeout 120s)."
+        return True, f"✅ '{filename}' erfolgreich indexiert und ab sofort befragbar."
     except Exception as e:
         return False, f"⚠️ Fehler beim Indexieren: {e}"
 
