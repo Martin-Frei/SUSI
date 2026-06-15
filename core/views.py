@@ -1,7 +1,9 @@
 import shutil
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from django.conf import settings
+from django.core.exceptions import SuspiciousFileOperation
+from django.utils.text import get_valid_filename
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
@@ -67,6 +69,18 @@ def _get_frontend_config() -> dict:
             "prompt_default":      "susi_standard",
             "llm_default":         "qwen2.5-coder:7b",
         }
+
+
+# ── Hilfsfunktion: Safe filename ─────────────────────────────────────────────
+def _safe_filename(name: str) -> str:
+    """Return a safe leaf filename for an upload.
+
+    Strips any directory components (handling both forward and back slashes) so
+    a crafted name like '../../etc/passwd' cannot escape the upload directory,
+    then validates the leaf. Raises SuspiciousFileOperation for empty, '.' or
+    '..' names."""
+    leaf = PurePosixPath(name.replace("\\", "/")).name
+    return get_valid_filename(leaf)
 
 
 # ── Hilfsfunktion: Datei in SUSIpedia ingesten ───────────────────────────────
@@ -165,7 +179,14 @@ def upload_view(request):
         )
 
     uploaded = request.FILES["file"]
-    filename = uploaded.name
+    try:
+        filename = _safe_filename(uploaded.name)
+    except SuspiciousFileOperation:
+        return render(
+            request,
+            "core/partials/upload_status.html",
+            {"success": False, "message": "⚠️ Ungültiger Dateiname."},
+        )
     ext = Path(filename).suffix.lower()
 
     allowed = getattr(settings, "ALLOWED_UPLOAD_EXTENSIONS", [".pdf", ".docx", ".txt", ".md"])
