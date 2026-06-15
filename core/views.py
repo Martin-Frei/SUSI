@@ -6,23 +6,26 @@ from django.http import HttpResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 
-# ── In-Memory Konversations-History (pro Session) ────────────────────────────
-_conversation_store: dict[str, list] = {}
+from core.models import ChatMessage
+
+
+def _session_key(request) -> str:
+    if not request.session.session_key:
+        request.session.create()
+    return request.session.session_key
 
 
 def _get_history(request) -> list:
-    key = request.session.session_key or ""
-    if not key:
-        request.session.create()
-        key = request.session.session_key
-    return _conversation_store.setdefault(key, [])
+    key = _session_key(request)
+    return [
+        {"role": m.role, "content": m.content}
+        for m in ChatMessage.objects.filter(session_key=key).order_by("created_at", "id")
+    ]
 
 
 def _add_to_history(request, role: str, content: str):
-    history = _get_history(request)
-    history.append({"role": role, "content": content})
-    if len(history) > 50:
-        _conversation_store[request.session.session_key] = history[-50:]
+    key = _session_key(request)
+    ChatMessage.objects.create(session_key=key, role=role, content=content)
 
 
 # ── Hilfsfunktion: SUSI befragen ─────────────────────────────────────────────
