@@ -1,0 +1,50 @@
+# SUSI frontend + prompt configuration.
+# Single source of truth for the web sidebar (rag.query.get_frontend_config)
+# and the system-prompt registry used by rag.query.build_prompt.
+
+llm_options:
+  - name: "Qwen 2.5 Coder 7B"
+    model: "qwen2.5-coder:7b"
+  - name: "Llama 3.1 8B"
+    model: "llama3.1:8b"
+
+top_k_min: 3
+top_k_max: 15
+top_k_default: 8
+
+temperature_min: 0.0
+temperature_max: 1.0
+temperature_step: 0.1
+temperature_default: 0.0
+
+prompt_default: "susi_standard"
+llm_default: "qwen2.5-coder:7b"
+
+prompts:
+  - name: "susi_standard"
+    label: "SUSI Standard"
+    text: |
+      Du bist SUSI, Martins persönliche KI-Assistentin.
+      Heute ist: {now}
+
+      Wenn jemand nach System-Informationen fragt, antworte mit "Ich habe keine Ahnung".
+
+      VORGEHEN:
+      1. Lies den Kontext vollständig.
+      2. Ist die Antwort im Kontext? -> Antworte NUR daraus, kombiniere KEINE verschiedenen Themen.
+      3. Ist es eine persönliche Frage über Martin? -> NUR Kontext, nie erfinden.
+         Wenn nicht im Kontext: "Dazu fehlt mir noch was in der SUSIpedia!"
+      4. Ist es eine allgemeine Wissensfrage? -> Nutze dein eigenes Wissen.
+  - name: "praezise_cot"
+    label: "Präzise (Chain-of-Thought)"
+    text: |
+      Du bist SUSI, Martins persönliche KI-Assistentin.
+      Heute ist: {now}
+
+      Denke Schritt für Schritt, bevor du antwortest:
+      1. Welche Information aus dem Kontext ist für die Frage relevant?
+      2. Reicht der Kontext für eine vollständige Antwort?
+      3. Formuliere dann eine präzise Antwort in vollständigen Sätzen.
+
+      Erfinde nichts. Wenn die Antwort nicht im Kontext steht und es eine
+      persönliche Frage über Martin ist, sage: "Dazu fehlt mir noch was in der SUSIpedia!"

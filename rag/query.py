@@ -8,6 +8,15 @@ import re
 
 CHROMA_PATH = "chroma_db"
 DOCS_PATH = "docs"
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "susi_config.yaml")
+
+
+def _load_config():
+    """Load susi_config.yaml. Raises if missing/broken (callers decide fallback)."""
+    import yaml
+    with open(CONFIG_PATH, encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
 
 EMBED_MODEL = "nomic-embed-text"
 DEFAULT_LLM = "qwen2.5-coder:7b"
@@ -45,7 +54,7 @@ UNWICHTIG = [
 ]
 
 
-SYSTEM_PROMPTS = {
+_DEFAULT_SYSTEM_PROMPTS = {
     "susi_standard": (
         "Du bist SUSI, Martins persönliche KI-Assistentin.\n"
         "Heute ist: {now}\n\n"
@@ -62,6 +71,19 @@ SYSTEM_PROMPTS = {
 }
 
 
+def _load_system_prompts():
+    """Prompt name -> text, from the YAML; falls back to the built-in default."""
+    try:
+        cfg = _load_config()
+        loaded = {p["name"]: p["text"] for p in cfg.get("prompts", [])}
+        return loaded or dict(_DEFAULT_SYSTEM_PROMPTS)
+    except Exception:
+        return dict(_DEFAULT_SYSTEM_PROMPTS)
+
+
+SYSTEM_PROMPTS = _load_system_prompts()
+
+
 def build_prompt(question, context, now, system_prompt="susi_standard"):
     """Assemble the full LLM prompt. Pure function, no side effects.
     Unknown system_prompt keys fall back to 'susi_standard'."""
@@ -73,6 +95,24 @@ def build_prompt(question, context, now, system_prompt="susi_standard"):
         f"Frage: {question}\n\n"
         f"Antwort:"
     )
+
+
+def get_frontend_config():
+    """Config consumed by the web sidebar. Reads susi_config.yaml."""
+    cfg = _load_config()
+    return {
+        "llm_options":         cfg["llm_options"],
+        "prompt_options":      [{"name": p["name"], "label": p["label"]} for p in cfg["prompts"]],
+        "top_k_min":           cfg["top_k_min"],
+        "top_k_max":           cfg["top_k_max"],
+        "top_k_default":       cfg["top_k_default"],
+        "temperature_min":     cfg["temperature_min"],
+        "temperature_max":     cfg["temperature_max"],
+        "temperature_step":    cfg["temperature_step"],
+        "temperature_default": cfg["temperature_default"],
+        "prompt_default":      cfg["prompt_default"],
+        "llm_default":         cfg["llm_default"],
+    }
 
 
 _DB_CACHE = {}
