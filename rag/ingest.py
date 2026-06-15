@@ -52,7 +52,6 @@ ALLES NEU INDEXIEREN:
 from langchain_ollama import OllamaEmbeddings
 from langchain_chroma import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import TextLoader
 from langchain_core.documents import Document
 from pathlib import Path
 import hashlib
@@ -222,7 +221,7 @@ def ingest_docs():
         chunks = [c for c in chunks if c.page_content.strip()]
 
         if not chunks:
-            print(f"  ⚠️  Keine verwertbaren Chunks – Datei übersprungen")
+            print("  ⚠️  Keine verwertbaren Chunks – Datei übersprungen")
             continue
 
         # Metadata sicherstellen

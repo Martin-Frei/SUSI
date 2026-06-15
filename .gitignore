@@ -67,3 +67,5 @@ tools/evaluation/results/*.json
 # Blockiert lokalen Konfigurations-Müll deiner Editoren
 .vscode/*.json
 .idea/*.json
+# Delegate gate venv (local, not part of project)
+.delegate_venv/
