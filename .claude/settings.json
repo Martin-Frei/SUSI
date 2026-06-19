@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(ls c:/Users/tsinn/.claude/projects/c--Users-tsinn-VSCode-Repos-SUSI-neu/memory/ 2>/dev/null || echo \"EMPTY\")",
-      "Read(//c/Users/tsinn/.claude/projects/c--Users-tsinn-VSCode-Repos-SUSI-neu/memory/**)"
-    ]
-  }
-}
