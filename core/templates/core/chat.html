@@ -2,6 +2,90 @@
 
 {% block title %}SUSI – Persönliche KI{% endblock %}
 
+{% block extra_css %}
+<style>
+  /* ── Radio Group ─────────────────────────────────────── */
+  .radio-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 6px;
+  }
+
+  .radio-group input[type="radio"] { display: none; }
+
+  .radio-group label {
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 180ms ease;
+    font-family: var(--font-mono);
+  }
+
+  .radio-group input[type="radio"]:checked + label {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .radio-group label:hover {
+    border-color: var(--border-hi);
+    color: var(--text);
+  }
+
+  /* ── Slider ──────────────────────────────────────────── */
+  .param-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .param-row__label {
+    font-size: 10px;
+    color: var(--text-dim);
+    min-width: 32px;
+  }
+
+  .param-row__value {
+    font-size: 10px;
+    color: var(--accent);
+    min-width: 28px;
+    text-align: right;
+    font-family: var(--font-mono);
+  }
+
+  .param-row input[type="range"] {
+    flex: 1;
+    accent-color: var(--accent);
+    height: 3px;
+    cursor: pointer;
+  }
+
+  /* ── Settings Label ──────────────────────────────────── */
+  .settings-param-label {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 10px;
+    margin-bottom: 2px;
+    font-family: var(--font-ui);
+    letter-spacing: 0.05em;
+  }
+
+  /* ── Save Feedback ───────────────────────────────────── */
+  #settings-status {
+    font-size: 10px;
+    color: var(--susi);
+    margin-top: 6px;
+    min-height: 14px;
+  }
+</style>
+{% endblock %}
+
 {% block body %}
 <div class="app">
 
@@ -11,11 +95,11 @@
     <div style="font-size:11px; color:var(--text-dim); font-family:var(--font-ui);">
       Selbständige Und Schlaue Intelligenzbestie
     </div>
-    <div class="header__status">Ollama lokal · qwen2.5-coder:7b</div>
+    <div class="header__status">Ollama lokal · {{ llm_model }}</div>
   </header>
 
   <!-- ── Sidebar ──────────────────────────────────────── -->
-  <aside class="sidebar">
+  <aside class="sidebar" style="overflow-y:auto;">
 
     <!-- Upload -->
     <div class="sidebar__section">
@@ -30,50 +114,155 @@
         id="upload-form"
       >
         {% csrf_token %}
-
         <label class="upload-zone" id="upload-zone" for="file-input">
           <span class="upload-zone__icon">📎</span>
           <div class="upload-zone__text">Datei ablegen oder klicken</div>
           <div class="upload-zone__types">PDF · DOCX · TXT · MD</div>
         </label>
-
-        <input
-          type="file"
-          name="file"
-          id="file-input"
-          class="upload-input"
-          accept=".pdf,.docx,.txt,.md"
-          onchange="this.form.requestSubmit()"
-        >
+        <input type="file" name="file" id="file-input" class="upload-input"
+          accept=".pdf,.docx,.txt,.md" onchange="this.form.requestSubmit()">
       </form>
 
-      <!-- Upload Indicator (läuft während htmx-request) -->
       <div id="upload-indicator" class="htmx-indicator" style="margin-top:8px;">
         <div style="font-size:11px; color:var(--accent);">Indexiere…</div>
         <div class="upload-progress"><div class="upload-progress__bar"></div></div>
       </div>
-
-      <!-- Upload Status (HTMX Ziel) -->
       <div id="upload-status"></div>
     </div>
 
     <!-- Model Info -->
     <div class="sidebar__section">
-      <div class="sidebar__label">Modell</div>
+      <div class="sidebar__label">Aktiv</div>
       <div class="model-badge">
         <div class="model-badge__dot"></div>
         <span class="model-badge__name">LLM</span>
-        <span class="model-badge__value">qwen2.5-coder:7b</span>
+        <span class="model-badge__value" id="badge-llm">{{ llm_model }}</span>
       </div>
       <div class="model-badge" style="margin-top:8px;">
         <div class="model-badge__dot" style="background:var(--accent);"></div>
         <span class="model-badge__name">Embed</span>
-        <span class="model-badge__value">nomic-embed-text</span>
+        <span class="model-badge__value">{{ embedding_model }}</span>
       </div>
       <div class="model-badge" style="margin-top:8px;">
         <div class="model-badge__dot" style="background:var(--muted);"></div>
-        <span class="model-badge__name">Vector DB</span>
-        <span class="model-badge__value">ChromaDB</span>
+        <span class="model-badge__name">top_k</span>
+        <span class="model-badge__value" id="badge-topk">{{ top_k }}</span>
+      </div>
+      <div class="model-badge" style="margin-top:8px;">
+        <div class="model-badge__dot" style="background:var(--muted);"></div>
+        <span class="model-badge__name">num_ctx</span>
+        <span class="model-badge__value" id="badge-ctx">{{ num_ctx }}</span>
+      </div>
+    </div>
+
+    <!-- Einstellungen -->
+    <div class="sidebar__section">
+      <div class="sidebar__label">Einstellungen</div>
+
+      <form id="settings-form"
+        hx-post="{% url 'core:settings' %}"
+        hx-target="#settings-status"
+        hx-swap="innerHTML"
+        hx-trigger="change"
+      >
+        {% csrf_token %}
+
+        <!-- LLM -->
+        <div class="settings-param-label">LLM</div>
+        <div class="radio-group">
+          <input type="radio" name="llm_model" id="llm1" value="llama3.1:8b"
+            {% if llm_model == "llama3.1:8b" %}checked{% endif %}>
+          <label for="llm1">llama3.1:8b</label>
+
+          <input type="radio" name="llm_model" id="llm2" value="qwen2.5-coder:7b"
+            {% if llm_model == "qwen2.5-coder:7b" %}checked{% endif %}>
+          <label for="llm2">qwen2.5-coder</label>
+        </div>
+
+        <!-- Algorithmus -->
+        <div class="settings-param-label">Algorithmus</div>
+        <div class="radio-group">
+          <input type="radio" name="algorithm" id="alg1" value="similarity"
+            {% if algorithm == "similarity" %}checked{% endif %}>
+          <label for="alg1">similarity</label>
+
+          <input type="radio" name="algorithm" id="alg2" value="mmr"
+            {% if algorithm == "mmr" %}checked{% endif %}>
+          <label for="alg2">mmr</label>
+        </div>
+
+        <!-- num_ctx -->
+        <div class="settings-param-label">num_ctx</div>
+        <div class="radio-group">
+          <input type="radio" name="num_ctx" id="ctx1" value="2048"
+            {% if num_ctx == 2048 %}checked{% endif %}>
+          <label for="ctx1">2048</label>
+
+          <input type="radio" name="num_ctx" id="ctx2" value="4096"
+            {% if num_ctx == 4096 %}checked{% endif %}>
+          <label for="ctx2">4096</label>
+
+          <input type="radio" name="num_ctx" id="ctx3" value="8192"
+            {% if num_ctx == 8192 %}checked{% endif %}>
+          <label for="ctx3">8192</label>
+        </div>
+
+        <!-- System Prompt -->
+        <div class="settings-param-label">System Prompt</div>
+        <div class="radio-group">
+          <input type="radio" name="system_prompt" id="sp1" value="praezise_neu"
+            {% if system_prompt == "praezise_neu" %}checked{% endif %}>
+          <label for="sp1">praezise_neu</label>
+
+          <input type="radio" name="system_prompt" id="sp2" value="praezise_alt"
+            {% if system_prompt == "praezise_alt" %}checked{% endif %}>
+          <label for="sp2">praezise_alt</label>
+
+          <input type="radio" name="system_prompt" id="sp3" value="susi_standard"
+            {% if system_prompt == "susi_standard" %}checked{% endif %}>
+          <label for="sp3">susi_standard</label>
+
+          <input type="radio" name="system_prompt" id="sp4" value="praezise_Cain_of_Tought"
+            {% if system_prompt == "praezise_Cain_of_Tought" %}checked{% endif %}>
+          <label for="sp4">chain_of_thought</label>
+
+          <input type="radio" name="system_prompt" id="sp5" value="praezise_hybrid"
+            {% if system_prompt == "praezise_hybrid" %}checked{% endif %}>
+          <label for="sp5">hybrid</label>
+        </div>
+
+        <!-- top_k Slider -->
+        <div class="settings-param-label">top_k</div>
+        <div class="param-row">
+          <span class="param-row__label">2</span>
+          <input type="range" name="top_k" min="2" max="15" step="1"
+            value="{{ top_k }}"
+            oninput="document.getElementById('topk-val').textContent=this.value; document.getElementById('badge-topk').textContent=this.value;">
+          <span class="param-row__label">15</span>
+          <span class="param-row__value" id="topk-val">{{ top_k }}</span>
+        </div>
+
+        <!-- temperature Slider -->
+        <div class="settings-param-label">temperature</div>
+        <div class="param-row">
+          <span class="param-row__label">0.0</span>
+          <input type="range" name="temperature" min="0.0" max="1.0" step="0.1"
+            value="{{ temperature }}"
+            oninput="document.getElementById('temp-val').textContent=parseFloat(this.value).toFixed(1);">
+          <span class="param-row__label">1.0</span>
+          <span class="param-row__value" id="temp-val">{{ temperature }}</span>
+        </div>
+
+      </form>
+
+      <div id="settings-status"></div>
+    </div>
+
+    <!-- Letzter Abruf -->
+    <div class="sidebar__section" id="retrieval-info">
+      <div class="sidebar__label">Letzter Abruf</div>
+      <div style="font-size:10px; color:var(--text-dim);">
+        Noch keine Abfrage.
       </div>
     </div>
 
@@ -91,9 +280,7 @@
   <!-- ── Chat ─────────────────────────────────────────── -->
   <main class="chat">
 
-    <!-- Nachrichten -->
     <div class="chat__messages" id="messages">
-
       {% if not history %}
         <div class="welcome">
           <div class="welcome__name">SUSI</div>
@@ -104,14 +291,17 @@
           {% if entry.role == "user" %}
             <div class="msg msg--user">{{ entry.content }}</div>
           {% else %}
-            <div class="msg msg--susi">{{ entry.content }}</div>
+            <div class="msg msg--susi">
+              {{ entry.content }}
+              {% if entry.tok_per_sec %}
+              <div class="msg__meta">⚡ {{ entry.tok_per_sec }} tok/s · {{ entry.tokens_generiert }} Tokens · {{ entry.antwortzeit_sek }}s</div>
+              {% endif %}
+            </div>
           {% endif %}
         {% endfor %}
       {% endif %}
-
     </div>
 
-    <!-- Eingabe -->
     <div class="chat__input-area">
       <form
         class="input-form"
@@ -167,15 +357,27 @@
     }
   }
 
-  // Nach HTMX-Swap nach unten scrollen
+  // LLM Badge beim Wechsel aktualisieren
+  document.querySelectorAll('input[name="llm_model"]').forEach(el => {
+    el.addEventListener('change', () => {
+      document.getElementById('badge-llm').textContent = el.value;
+    });
+  });
+
+  // num_ctx Badge beim Wechsel aktualisieren
+  document.querySelectorAll('input[name="num_ctx"]').forEach(el => {
+    el.addEventListener('change', () => {
+      document.getElementById('badge-ctx').textContent = el.value;
+    });
+  });
+
   document.body.addEventListener('htmx:afterSwap', (e) => {
     if (e.target.id === 'messages') scrollToBottom();
   });
 
-  // Drag & Drop für Upload-Zone
+  // Drag & Drop
   const zone = document.getElementById('upload-zone');
   const input = document.getElementById('file-input');
-
   ['dragover', 'dragenter'].forEach(ev =>
     zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.add('drag-over'); })
   );
@@ -190,7 +392,6 @@
     }
   });
 
-  // Initial scroll
   scrollToBottom();
 </script>
 {% endblock %}

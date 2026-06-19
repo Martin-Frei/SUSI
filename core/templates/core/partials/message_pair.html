@@ -1,5 +1,30 @@
+{# core/templates/core/partials/message_pair.html #}
 {# Wird von ask_view zurückgegeben – erscheint direkt im #messages Container #}
 <div class="msg-pair">
   <div class="msg msg--user">{{ question }}</div>
-  <div class="msg msg--susi">{{ answer|linebreaksbr }}</div>
+  <div class="msg msg--susi">
+    {{ answer|linebreaksbr }}
+    <div class="msg__meta">
+      ⚡ {{ tok_per_sec }} tok/s &nbsp;·&nbsp;
+      {{ tokens_generiert }} Tokens &nbsp;·&nbsp;
+      {{ antwortzeit_sek }}s
+      {% if reranker_used %}&nbsp;·&nbsp;🔁 reranked{% endif %}
+    </div>
+  </div>
+</div>
+
+{# Retrieval-Info Sidebar per OOB-Swap aktualisieren #}
+<div id="retrieval-info" hx-swap-oob="innerHTML">
+  <div class="sidebar__label">Letzter Abruf</div>
+  <div style="font-size:10px; line-height:1.8;">
+    <div style="color:var(--text-dim); margin-bottom:4px;">
+      📥 {{ chunks_gefunden }} Chunks gefunden
+      {% if reranker_used %}&nbsp;·&nbsp; 🔁 {{ chunks_nach_reranking }} nach Reranking{% endif %}
+    </div>
+    {% for quelle in quelldateien %}
+    <div style="color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="{{ quelle }}">
+      📄 {{ quelle|cut:"docs\\"|cut:"docs/" }}
+    </div>
+    {% endfor %}
+  </div>
 </div>

@@ -53,7 +53,7 @@ reranker:
       top_k_filter: [3, 5]   # k=3 und k=5 ohne Reranker
 
     - active: true
-      model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+      model: "BAAI/bge-reranker-v2-m3"
       top_n: 3
       top_k_filter: [5, 7, 9]  # k=5,7,9 mit Reranker
 

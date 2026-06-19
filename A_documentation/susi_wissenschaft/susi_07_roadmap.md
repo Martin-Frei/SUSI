@@ -17,7 +17,8 @@ Die Erkenntnisse aus der Evaluierung und dem externen Review zeigen mehrere offe
 
 ### SUSIpedia-Qualität vollständig abschließen
 
-Stand 10.06.2026: ca. 85% der 124 Dateien überarbeitet, Retrieval Hit Rate bereits auf 91%. Die verbleibenden ~15% werden heute abgeschlossen — die erwartete Hit Rate danach liegt nahe 100%. Das Ergebnis wird durch Lauf A direkt gemessen: eine Config über alle 40 Testfragen, identisch zu Lauf 8, um den sauberen Vorher-Nachher-Vergleich zu haben.
+Stand 10.06.2026: ca. 85% der 124 Dateien überarbeitet, Retrieval Hit Rate bereits auf 91%. Die verbleibenden ~15% werden heute abgeschlossen — die erwartete Hit Rate danach liegt nahe 100%. Das Ergebnis wird durch Lauf A direkt gemessen: eine Config über alle 40 Testfragen, identisch zu Lauf 8, um den sauberen Vorher-Nachher-Vergleich zu haben.     
+11.02.2026 alle Dokumente fertig 
 
 ### MMR vs. Similarity evaluieren
 

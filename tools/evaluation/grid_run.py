@@ -9,27 +9,21 @@ Voraussetzung: indexer.py wurde bereits ausgeführt (Collections existieren).
 Jeder Lauf bekommt eine eigene CSV mit Timestamp im Namen:
     tools/evaluation/results/eval_20260524_1423_smoke.csv
 
-C:/Users/tsinn/VSCode/Repos/SUSI/susi_env/Scripts/Activate.ps1 
-
-
 Aufruf:
     # Smoke-Test (4 Fragen)
     python tools/evaluation/grid_run.py --mode smoke
 
-    # Mit manueller Bewertung
-    python tools/evaluation/grid_run.py --mode smoke --manual
+    # Voller Grid-Lauf (293 Fragen, über Nacht)
+    python tools/evaluation/grid_run.py --mode full
 
-    # Voller Grid-Lauf (40 Fragen)
-    python tools/evaluation/grid_run.py --mode full --manual
-
-    # Nur bestimmtes LLM + Embedding testen (Debug)
-    python tools/evaluation/grid_run.py --mode smoke --llm qwen2.5-coder:7b --embedding nomic-embed-text
-
-    # Kombinationen zählen ohne auszuführen
-    python tools/evaluation/grid_run.py --dry-run
+    # Dry-Run: Kombinationen zählen ohne auszuführen
+    python tools/evaluation/grid_run.py --dry-run --mode full
 
     # Zusammenfassung einer bestehenden CSV
     python tools/evaluation/grid_run.py --summary --csv tools/evaluation/results/eval_xxx.csv
+
+    # Nachbewertung (Grauzone-Einträge manuell bewerten)
+    python tools/evaluation/grid_run.py --nachbewertung --csv tools/evaluation/results/eval_xxx.csv
 
 Optionen:
     --mode smoke|full       Fragen-Set (Standard: smoke)
@@ -39,8 +33,9 @@ Optionen:
     --llm MODEL             Nur dieses LLM testen
     --embedding MODEL       Nur dieses Embedding-Modell testen
     --summary               Zusammenfassung anzeigen
-    --csv PATH              CSV für --summary angeben
+    --csv PATH              CSV für --summary oder --nachbewertung
     --dry-run               Kombinationen zählen ohne auszuführen
+    --nachbewertung         Nur None-Einträge aus bestehender CSV nachbewerten
 """
 
 import os
@@ -66,7 +61,6 @@ from evaluator import (
 )
 from indexer import get_collection_name, find_config, load_config
 from auto_scorer import berechne_auto_score, zeige_auto_score
-from eval_meta import schreibe_meta
 
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
 
@@ -74,16 +68,6 @@ PROJECT_ROOT = SCRIPT_DIR.parent.parent
 # ── Fragen laden ──────────────────────────────────────────────────
 
 def lade_fragen(fragen_path: str, mode: str) -> list:
-    """
-    Gold-Set laden — smoke (4 Fragen) oder full (40 Fragen).
-
-    Args:
-        fragen_path: Pfad zur testfragen.json
-        mode:        "smoke" oder "full"
-
-    Returns:
-        Liste von Frage-Dicts mit id, frage, referenzantwort, kategorie
-    """
     path = Path(fragen_path)
     if not path.exists():
         path = PROJECT_ROOT / fragen_path
@@ -95,13 +79,41 @@ def lade_fragen(fragen_path: str, mode: str) -> list:
     if mode == "smoke":
         for f in data["smoke_test"]["fragen"]:
             fragen.append(f)
+    elif "full_run" in data:
+        for f in data["full_run"]["fragen"]:
+            if not f.get("id"):
+                continue
+            fragen.append(f)
     else:
         for kategorie, kat_data in data["full_evaluation"]["kategorien"].items():
             for f in kat_data["fragen"]:
                 f["kategorie"] = kategorie
                 fragen.append(f)
 
+    for f in fragen:
+        if "referenzantwort" not in f and "referenz" in f:
+            f["referenzantwort"] = f["referenz"]
+
     return fragen
+
+
+# ── Reranker-Kombinationen ────────────────────────────────────────
+
+def get_reranker_combinations(config: dict) -> list:
+    """
+    Gibt alle Reranker-Configs zurück als Liste von Dicts.
+    Jede Config enthält: active, model, top_n, top_k_filter
+
+    Wenn kein reranker-Block in der Config: nur ohne Reranker.
+    """
+    reranker_cfg = config.get("reranker", {})
+    configs = reranker_cfg.get("configs", [])
+
+    if not configs:
+        # Kein Reranker-Block — nur ohne Reranker
+        return [{"active": False, "model": None, "top_n": None, "top_k_filter": None}]
+
+    return configs
 
 
 # ── Kombinationen ─────────────────────────────────────────────────
@@ -111,14 +123,7 @@ def get_all_combinations(config: dict,
                           filter_embedding: str = None) -> list:
     """
     Alle aktiven Parameter-Kombinationen aus der config.yaml berechnen.
-
-    Args:
-        config:           Geladene config.yaml als Dict
-        filter_llm:       Nur dieses LLM verwenden (Debug)
-        filter_embedding: Nur dieses Embedding-Modell verwenden (Debug)
-
-    Returns:
-        Liste aller Kombinationen als Tupel
+    Berücksichtigt Reranker-Configs mit top_k_filter.
     """
     de = config["data_engineering"]
     ret = config["retrieval"]
@@ -141,70 +146,62 @@ def get_all_combinations(config: dict,
 
     temperatures = gen["temperatures"]
     prompts = [p for p in gen["system_prompts"] if p.get("active", False)]
+    reranker_configs = get_reranker_combinations(config)
 
-    return list(itertools.product(
+    combos = []
+    base_combos = list(itertools.product(
         embeddings, chunk_sizes, overlaps, separators,
         top_k_values, algorithms, score_thresholds,
         llms, temperatures, prompts
     ))
 
+    for combo in base_combos:
+        (embedding, chunk_size, overlap, sep, top_k,
+         algorithm, score_threshold, llm, temperature, prompt) = combo
+
+        for reranker in reranker_configs:
+            top_k_filter = reranker.get("top_k_filter")
+
+            # top_k_filter prüfen — wenn gesetzt, nur passende k-Werte
+            if top_k_filter is not None and top_k not in top_k_filter:
+                continue
+
+            combos.append((
+                embedding, chunk_size, overlap, sep,
+                top_k, algorithm, score_threshold,
+                llm, temperature, prompt, reranker
+            ))
+
+    return combos
+
 
 # ── Output-Pfad mit Timestamp ─────────────────────────────────────
 
 def build_output_path(config: dict, mode: str) -> str:
-    """
-    Baut den CSV-Ausgabepfad mit Timestamp und Mode.
-
-    Format: tools/evaluation/results/eval_YYYYMMDD_HHMM_smoke.csv
-
-    Jeder Lauf bekommt eine eigene Datei — keine Vermischung von Ergebnissen
-    aus verschiedenen Configs oder Zeitpunkten.
-
-    Args:
-        config: Geladene config.yaml
-        mode:   "smoke" oder "full"
-
-    Returns:
-        Vollständiger Pfad zur CSV-Datei
-    """
     base = PROJECT_ROOT / "tools" / "evaluation" / "results"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M")
     filename = f"eval_{timestamp}_{mode}.csv"
     return str(base / filename)
 
 
-# ── RAG-Anfrage ───────────────────────────────────────────────────
+# ── RAG-Anfrage mit optionalem Reranker ──────────────────────────
 
 def rag_query(question: str, collection_name: str,
               embedding_model: str, top_k: int,
               algorithm: str, score_threshold: Optional[float],
               llm_model: str, temperature: float,
-              system_prompt: str) -> tuple:
+              system_prompt: str,
+              reranker_cfg: dict = None,
+              reranker_instance=None) -> tuple:
     """
-    Eine RAG-Anfrage ausführen: Retrieval + Generation.
+    Eine RAG-Anfrage ausführen: Retrieval + optionaler Reranker + Generation.
 
-    Gibt alle relevanten Daten zurück damit BERTScore und ROUGE-L
-    Antwort und Chunks einzeln bewerten können.
-
-    Args:
-        question:           Die Frage an SUSI
-        collection_name:    Name der ChromaDB Collection
-        embedding_model:    Embedding-Modell für die Frage
-        top_k:              Anzahl der abzurufenden Chunks
-        algorithm:          "similarity" oder "mmr"
-        score_threshold:    Minimale Ähnlichkeit (None = kein Limit)
-        llm_model:          LLM-Name in Ollama
-        temperature:        Temperature (0.0 = deterministisch)
-        system_prompt:      System-Prompt-Text
+    reranker_instance: bereits geladenes CrossEncoder-Objekt (aus dem Cache in main()).
+                       Wenn übergeben, wird kein neues Modell geladen.
 
     Returns:
-        tuple: (antwort, dauer_sek, n_chunks, quelldateien, chunk_texte, kontext_text)
-            antwort         Generierte Antwort
-            dauer_sek       Antwortzeit in Sekunden
-            n_chunks        Anzahl abgerufener Chunks
-            quelldateien    Kommagetrennte Quell-Dateipfade
-            chunk_texte     Liste der Chunk-Texte (für BERTScore + ROUGE-L)
-            kontext_text    Zusammengefügter Kontext (für CSV-Inspektion)
+        tuple: (antwort, dauer_sek, n_chunks, quelldateien, chunk_texte,
+                kontext_text, reranker_used)
     """
     from langchain_ollama import OllamaEmbeddings, ChatOllama
     from langchain_chroma import Chroma
@@ -214,7 +211,7 @@ def rag_query(question: str, collection_name: str,
 
     if not Path(chroma_path).exists():
         return (f"[FEHLER] Collection nicht gefunden: {collection_name}",
-                0.0, 0, "", [], "")
+                0.0, 0, "", [], "", False)
 
     embeddings = OllamaEmbeddings(model=embedding_model)
     db = Chroma(
@@ -233,17 +230,31 @@ def rag_query(question: str, collection_name: str,
         else:
             docs = db.similarity_search(question, k=top_k)
     except Exception as e:
-        return (f"[RETRIEVAL FEHLER] {e}", time.time() - start, 0, "", [], "")
+        return (f"[RETRIEVAL FEHLER] {e}", time.time() - start, 0, "", [], "", False)
 
     if not docs:
-        return ("[KEIN KONTEXT GEFUNDEN]", time.time() - start, 0, "", [], "")
+        return ("[KEIN KONTEXT GEFUNDEN]", time.time() - start, 0, "", [], "", False)
 
-    # Chunk-Texte für Metriken (ungekürzt)
+    # Reranker (optional) — nutzt gecachte Instanz aus main(), kein Nachladen
+    reranker_used = False
+    if reranker_cfg and reranker_cfg.get("active", False) and reranker_instance is not None:
+        try:
+            top_n = reranker_cfg.get("top_n", 3)
+            pairs = [(question, doc.page_content) for doc in docs]
+            scores = reranker_instance.predict(pairs)
+            # float() konvertieren — amberoad gibt numpy-Arrays zurück, kein Scalar
+            scores = [float(s) if not hasattr(s, '__len__') else float(s[0]) for s in scores]
+            ranked = sorted(zip(scores, docs), key=lambda x: x[0], reverse=True)
+            docs = [doc for _, doc in ranked[:top_n]]
+            reranker_used = True
+        except Exception as e:
+            print(f"  ⚠️  Reranker Fehler: {e} — fahre ohne Reranker fort")
+
+    # Chunk-Texte für Metriken
     chunk_texte = [doc.page_content for doc in docs]
 
     # Kontext für LLM (max 4000 Zeichen)
     max_chars = 4000
-    separator = "\n\n"
     context_parts = []
     total_chars = 0
     for doc in docs:
@@ -256,7 +267,7 @@ def rag_query(question: str, collection_name: str,
         context_parts.append(content)
         total_chars += len(content)
 
-    context = separator.join(context_parts)
+    context = "\n\n".join(context_parts)
     quelldateien = ", ".join(set(doc.metadata.get("source", "?") for doc in docs))
 
     # Generation
@@ -274,26 +285,16 @@ Antwort:"""
         response = llm.invoke(full_prompt)
         antwort = response.content.strip()
     except Exception as e:
-        return (f"[LLM FEHLER] {e}", time.time() - start, len(docs), quelldateien, chunk_texte, context)
+        return (f"[LLM FEHLER] {e}", time.time() - start, len(docs),
+                quelldateien, chunk_texte, context, reranker_used)
 
-    return (antwort, time.time() - start, len(docs), quelldateien, chunk_texte, context)
+    return (antwort, time.time() - start, len(docs), quelldateien,
+            chunk_texte, context, reranker_used)
 
 
 # ── Fortschritt laden ─────────────────────────────────────────────
 
 def lade_erledigte_runs(csv_path: str) -> set:
-    """
-    Bereits erledigte Runs laden für Fortsetzung nach Abbruch.
-
-    Erstellt einen eindeutigen Key aus allen Parametern + Frage-ID.
-    Beim nächsten Start werden diese Runs übersprungen.
-
-    Args:
-        csv_path: Pfad zur bestehenden CSV
-
-    Returns:
-        Set von Tupeln (Parameter-Kombination + Frage-ID)
-    """
     erledigte = set()
     path = Path(csv_path)
     if not path.exists():
@@ -309,7 +310,7 @@ def lade_erledigte_runs(csv_path: str) -> set:
                 row.get("top_k", ""), row.get("algorithm", ""),
                 row.get("score_threshold", ""), row.get("llm_model", ""),
                 row.get("temperature", ""), row.get("system_prompt_name", ""),
-                row.get("frage_id", "")
+                row.get("reranker_active", ""), row.get("frage_id", "")
             )
             erledigte.add(key)
     return erledigte
@@ -318,69 +319,35 @@ def lade_erledigte_runs(csv_path: str) -> set:
 # ── Nachbewertung ─────────────────────────────────────────────────
 
 def nachbewertung_starten(csv_path: str):
-    """
-    Nachbewertung: zeigt nur Einträge mit score_manuell=None (Grauzone).
-
-    Vereinfachte Skala:
-        0  →  falsch (Ausweichantwort, Halluzination, falscher Chunk)
-        1  →  teilweise richtig (Training-Wissen oder unvollständig)
-        2  →  korrekt aus Chunk (RAG funktioniert)
-
-    Auto-Scorer hat intern bereits 4/5 unterschieden — du bewertest
-    nur die Qualität, nicht die Ursache.
-
-    Args:
-        csv_path: Pfad zur CSV mit None-Einträgen
-    """
     import csv as csv_module
-    from pathlib import Path
-
     path = Path(csv_path)
     if not path.exists():
         print(f"❌ CSV nicht gefunden: {csv_path}")
         return
 
-    # Alle Zeilen laden
     with open(path, "r", encoding="utf-8") as f:
-        daten = list(csv_module.DictReader(f))
-        felder = daten[0].keys() if daten else []
+        reader = csv_module.DictReader(f)
+        felder = reader.fieldnames
+        daten = list(reader)
 
-    # None-Einträge finden
     none_eintraege = [
         (i, row) for i, row in enumerate(daten)
-        if row.get("score_manuell", "") in ("", None)
-        and row.get("auto_score", "") not in ("0",)
+        if row.get("score_manuell", "") in ("", "None", None)
+        and row.get("generierte_antwort", "")
     ]
 
-    if not none_eintraege:
-        print("✅ Keine None-Einträge gefunden — alles bewertet!")
-        return
-
-    print(f"\n{'='*60}")
-    print(f"📝 NACHBEWERTUNG — {Path(csv_path).name}")
-    print(f"   {len(none_eintraege)} Einträge zu bewerten")
-    print(f"   Skala: 0=Falsch | 1=Teilweise | 2=Korrekt")
-    print(f"          s=Ueberspringen | q=Beenden")
-    print(f"{'='*60}")
+    print(f"\n📋 {len(none_eintraege)} Einträge ohne manuelle Bewertung")
 
     bewertet = 0
     uebersprungen = 0
 
     try:
-        for idx, (zeilen_nr, row) in enumerate(none_eintraege, 1):
-            print(f"\n[{idx}/{len(none_eintraege)}] "
-                  f"{row.get('embedding_model')} | "
-                  f"c{row.get('chunk_size')} o{row.get('overlap')} | "
-                  f"k{row.get('top_k')} | "
-                  f"{row.get('llm_model')} t{row.get('temperature')} | "
-                  f"{row.get('system_prompt_name')} | "
-                  f"{row.get('frage_id')}")
-
-            print(f"\n❓ FRAGE:\n{row.get('frage', '')}\n")
+        for zeilen_nr, row in none_eintraege:
+            print(f"\n{'='*60}")
+            print(f"❓ FRAGE:\n{row.get('frage', '')}\n")
             print(f"✅ REFERENZ:\n{row.get('referenzantwort', '')}\n")
             print(f"🤖 SUSI:\n{row.get('generierte_antwort', '')}\n")
 
-            # Metriken anzeigen
             bert = row.get('antwort_bert', '')
             rouge = row.get('antwort_rougeL', '')
             delta = row.get('delta', '')
@@ -413,7 +380,6 @@ def nachbewertung_starten(csv_path: str):
         print(f"\n⚠️  Unterbrochen nach {bewertet} Bewertungen")
 
     finally:
-        # CSV zurückschreiben
         with open(path, "w", newline="", encoding="utf-8") as f:
             writer = csv_module.DictWriter(f, fieldnames=felder)
             writer.writeheader()
@@ -422,8 +388,6 @@ def nachbewertung_starten(csv_path: str):
         print(f"\n✅ Gespeichert!")
         print(f"   Bewertet      : {bewertet}")
         print(f"   Übersprungen  : {uebersprungen}")
-        print(f"   Noch offen    : {len(none_eintraege) - bewertet - uebersprungen}")
-
 
 
 # ── Hauptfunktion ─────────────────────────────────────────────────
@@ -439,18 +403,15 @@ def main():
     parser.add_argument("--summary", action="store_true")
     parser.add_argument("--csv", help="CSV für --summary oder --nachbewertung")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--nachbewertung", action="store_true",
-                        help="Nur None-Eintraege aus bestehender CSV nachbewerten")
+    parser.add_argument("--fragen", help="Pfad zur Fragen-JSON (überschreibt config)")
+    parser.add_argument("--nachbewertung", action="store_true")
     args = parser.parse_args()
 
-    # Config laden
     config_path = find_config(args.config)
     config = load_config(config_path)
 
-    # Nachbewertung — nur None-Einträge aus bestehender CSV
     if args.nachbewertung:
         if not args.csv:
-            # Neueste CSV suchen
             results_dir = PROJECT_ROOT / "tools" / "evaluation" / "results"
             csvs = sorted(results_dir.glob("eval_*.csv"), reverse=True)
             if not csvs:
@@ -462,11 +423,9 @@ def main():
         nachbewertung_starten(csv_path)
         return
 
-    # Nur Zusammenfassung
     if args.summary:
         csv_path = args.csv
         if not csv_path:
-            # Neueste CSV im results/ Ordner suchen
             results_dir = PROJECT_ROOT / "tools" / "evaluation" / "results"
             csvs = sorted(results_dir.glob("eval_*.csv"), reverse=True)
             if csvs:
@@ -478,35 +437,73 @@ def main():
         drucke_zusammenfassung(csv_path)
         return
 
-    # Fragen laden
-    fragen_path = PROJECT_ROOT / config["meta"]["fragen_path"]
+    if args.fragen:
+        fragen_path = Path(args.fragen)
+        if not fragen_path.is_absolute():
+            fragen_path = PROJECT_ROOT / args.fragen
+    else:
+        fragen_path = PROJECT_ROOT / config["meta"]["fragen_path"]
     fragen = lade_fragen(str(fragen_path), args.mode)
 
-    # Kombinationen
     combos = get_all_combinations(config, args.llm, args.embedding)
     gesamt = len(combos) * len(fragen)
 
-    # Output-Pfad mit Timestamp
     output_path = build_output_path(config, args.mode)
 
+    # Reranker-Info für Anzeige
+    reranker_configs = get_reranker_combinations(config)
+    reranker_aktiv = any(r.get("active", False) for r in reranker_configs)
+
     print(f"\n{'='*60}")
-    print(f"🚀 SUSI RAG Grid-Lauf")
+    print(f"🚀 SUSI RAG Grid-Lauf — Lauf C")
     print(f"{'='*60}")
     print(f"   Modus          : {args.mode.upper()} ({len(fragen)} Fragen)")
     print(f"   Kombinationen  : {len(combos)}")
     print(f"   Gesamt Läufe   : {gesamt}")
-    print(f"   Manuelle Wertung: {'JA' if args.manual else 'NEIN'}")
+    print(f"   Reranker       : {'JA' if reranker_aktiv else 'NEIN'}")
+    print(f"   Manuelle Wertung: {'JA' if args.manual else 'NEIN (Auto-Scorer)'}")
     print(f"   Output         : {output_path}")
     print(f"{'='*60}")
 
     if args.dry_run:
         print("\n🔍 DRY RUN — Keine Ausführung")
+        # Aufschlüsselung der Kombinationen
+        print("\nKombinationen aufgeschlüsselt:")
+        from collections import Counter
+        reranker_counter = Counter()
+        algo_counter = Counter()
+        llm_counter = Counter()
+        for combo in combos:
+            (emb, cs, ov, sep, top_k, algo, st, llm, temp, prompt, reranker) = combo
+            reranker_counter[f"reranker={'an' if reranker.get('active') else 'aus'}, k={top_k}"] += 1
+            algo_counter[algo["name"]] += 1
+            llm_counter[llm["name"]] += 1
+        print(f"\n  LLM:")
+        for k, v in llm_counter.items():
+            print(f"    {k}: {v} Combos × {len(fragen)} Fragen = {v*len(fragen)} Runs")
+        print(f"\n  Algorithmus:")
+        for k, v in algo_counter.items():
+            print(f"    {k}: {v} Combos")
+        print(f"\n  Reranker + top_k:")
+        for k, v in sorted(reranker_counter.items()):
+            print(f"    {k}: {v} Combos")
         return
 
-    # Erledigte laden (Fortsetzung)
     erledigte = lade_erledigte_runs(output_path)
     if erledigte:
         print(f"\n♻️  {len(erledigte)} bereits erledigte Runs — werden übersprungen")
+
+    # ── Reranker-Cache: einmal laden, für alle Runs wiederverwenden ──
+    # Verhindert dass CrossEncoder() tausende Male neu instanziiert wird
+    reranker_cache = {}
+    from sentence_transformers import CrossEncoder
+    for r_cfg in reranker_configs:
+        if r_cfg.get("active", False) and r_cfg.get("model"):
+            model_name = r_cfg["model"]
+            if model_name not in reranker_cache:
+                print(f"  🔁 Lade Reranker einmalig: {model_name}")
+                reranker_cache[model_name] = CrossEncoder(model_name)
+                print(f"  ✅ Reranker bereit: {model_name}")
 
     writer = CSVWriter(output_path)
     run_nr = 0
@@ -518,11 +515,13 @@ def main():
         for combo in combos:
             (embedding, chunk_size, overlap, (sep_name, separators_list),
              top_k, algorithm_dict, score_threshold,
-             llm, temperature, prompt_dict) = combo
+             llm, temperature, prompt_dict, reranker_cfg) = combo
 
             collection_name = get_collection_name(
                 embedding["name"], chunk_size, overlap, sep_name
             )
+
+            reranker_label = "reranker=an" if reranker_cfg.get("active") else "reranker=aus"
 
             for frage_data in fragen:
                 run_nr += 1
@@ -531,6 +530,7 @@ def main():
                     embedding["name"], str(chunk_size), str(overlap), sep_name,
                     str(top_k), algorithm_dict["name"], str(score_threshold),
                     llm["name"], str(temperature), prompt_dict["name"],
+                    str(reranker_cfg.get("active", False)),
                     frage_data["id"]
                 )
 
@@ -539,14 +539,16 @@ def main():
                     continue
 
                 kategorie = frage_data.get("kategorie", "?")
-                print(f"\n[{run_nr}/{gesamt}] {embedding['name']} | c{chunk_size} o{overlap} | "
-                      f"k{top_k} {algorithm_dict['name']} | {llm['name']} t{temperature} | "
-                      f"{prompt_dict['name']} | {frage_data['id']}")
+                print(f"\n[{run_nr}/{gesamt}] {embedding['name']} | c{chunk_size} | "
+                      f"k{top_k} {algorithm_dict['name']} | {reranker_label} | "
+                      f"{llm['name']} t{temperature} | {frage_data['id']}")
                 print(f"  ❓ {frage_data['frage'][:80]}")
 
-                # RAG-Anfrage
                 try:
-                    antwort, dauer, n_chunks, quellen, chunk_texte, kontext_text = rag_query(
+                    # Gecachte Reranker-Instanz holen (None wenn kein Reranker aktiv)
+                    reranker_inst = reranker_cache.get(reranker_cfg.get("model")) if reranker_cfg.get("active") else None
+
+                    result_tuple = rag_query(
                         question=frage_data["frage"],
                         collection_name=collection_name,
                         embedding_model=embedding["name"],
@@ -555,8 +557,11 @@ def main():
                         score_threshold=score_threshold,
                         llm_model=llm["name"],
                         temperature=temperature,
-                        system_prompt=prompt_dict["text"]
+                        system_prompt=prompt_dict["text"],
+                        reranker_cfg=reranker_cfg,
+                        reranker_instance=reranker_inst
                     )
+                    antwort, dauer, n_chunks, quellen, chunk_texte, kontext_text, reranker_used = result_tuple
                     fehler_text = ""
                     if antwort.startswith("[FEHLER]") or antwort.startswith("[LLM FEHLER]"):
                         fehler_text = antwort
@@ -570,22 +575,23 @@ def main():
                     quellen = ""
                     chunk_texte = []
                     kontext_text = ""
+                    reranker_used = False
                     fehler_text = str(e)
                     fehler_count += 1
 
+                reranker_info = ""
+                if reranker_cfg.get("active"):
+                    top_n = reranker_cfg.get("top_n", 3)
+                    reranker_info = f" | 🔁 {top_k}→{top_n}" if reranker_used else " | ⚠️ Reranker fehlgeschlagen"
+
                 print(f"  🤖 {antwort[:120]}" if len(antwort) > 120 else f"  🤖 {antwort}")
-                print(f"  ⏱️  {dauer:.1f}s | {n_chunks} Chunks")
+                print(f"  ⏱️  {dauer:.1f}s | {n_chunks} Chunks{reranker_info}")
 
-                # ── Scoring ───────────────────────────────────────────────
-                # Auto-Scorer: berechnet Score 0-5 aus Metriken
-                # Grauzone: nur dann manuell eingreifen
-
-                # Schritt 1: Ausweichantwort prüfen (exakt, kein Teilstring)
+                # Scoring
                 ausweich = pruefe_ausweichantwort(antwort) if antwort else None
                 if ausweich == 0:
                     auto_null_count += 1
 
-                # Schritt 2: Metriken berechnen
                 bert_info = {}
                 rouge_info = {}
                 if antwort:
@@ -608,7 +614,6 @@ def main():
                               f"MaxChunk: {bert_info['max_chunk_bert']:.3f} | "
                               f"Delta: {bert_info['delta']:+.3f}{rouge_str}")
 
-                # Schritt 3: Auto-Scorer (0-5 Skala)
                 auto_result = berechne_auto_score(
                     antwort=antwort or "",
                     antwort_bert=bert_info.get("antwort_bert"),
@@ -619,7 +624,6 @@ def main():
                     auto_score_ausweich=ausweich
                 )
 
-                # Schritt 4: Score bestimmen
                 score_man = None
                 score_jud = None
 
@@ -641,10 +645,8 @@ def main():
                         drucke_zusammenfassung(output_path)
                         return
                 elif antwort and not auto_result["manuell"]:
-                    # Automatisch bewertet — kein manueller Eingriff nötig
                     score_man = auto_result["score"]
 
-                # Judge
                 if args.judge and antwort and auto_result["manuell"]:
                     judge_cfg = config.get("evaluation", {}).get("judge_model", {})
                     if judge_cfg.get("enabled", False):
@@ -655,7 +657,6 @@ def main():
                             judge_model=judge_cfg.get("model", "claude-sonnet-4-20250514")
                         )
 
-                # Ergebnis speichern
                 result = EvalResult(
                     run_id=str(uuid.uuid4())[:8],
                     timestamp=datetime.now().isoformat(),
@@ -675,7 +676,7 @@ def main():
                     referenzantwort=frage_data["referenzantwort"],
                     generierte_antwort=antwort,
                     kontext_text=kontext_text,
-                    auto_score=ausweich,
+                    auto_score=auto_result.get("score"),
                     score_manuell=score_man,
                     score_judge=score_jud,
                     antwort_bert=bert_info.get("antwort_bert"),
@@ -698,7 +699,6 @@ def main():
     finally:
         writer.close()
 
-    # Abschluss
     print(f"\n{'='*60}")
     print(f"✅ Grid-Lauf abgeschlossen!")
     print(f"   Ausgeführt     : {run_nr - uebersprungen}")
@@ -708,9 +708,6 @@ def main():
     print(f"   CSV            : {output_path}")
 
     drucke_zusammenfassung(output_path)
-
-    # Meta-CSV generieren
-    schreibe_meta(csv_path=output_path, config=config)
 
     print(f"\nZusammenfassung anzeigen:")
     print(f"  python tools/evaluation/grid_run.py --summary --csv {output_path}")

@@ -29,41 +29,52 @@ Aufruf standalone:
 from typing import Optional
 
 
+# ── Konstanten ────────────────────────────────────────────────────
+MAX_SCORE = 5
+KORREKT_THRESHOLD = 2   # Score >= 2 gilt als korrekt
+
+
 # ── Schwellenwerte (aus echten Daten) ─────────────────────────────
 
-# Aus 768 Einträgen berechnet:
-# Score 2 (korrekt): antwort_rougeL Ø 0.343, antwort_bert Ø 0.784
-# Score 0 (falsch):  antwort_rougeL Ø 0.099, antwort_bert Ø 0.644
-# Score Auto-0:      antwort_rougeL Ø 0.025
-
 SCHWELLEN = {
-    # Ausweichantwort — ROUGE-L fast 0
     "ausweich_rouge": 0.05,
-
-    # Sicher korrekt (Score 3) — beide Metriken hoch
     "korrekt_rouge": 0.15,
     "korrekt_bert": 0.65,
-
-    # Falscher Chunk (Score 5) — Chunk ROUGE-L niedrig
     "falscher_chunk_rouge": 0.10,
-
-    # Generation-Problem (Score 4) — Chunk war gut, Antwort nicht
     "generation_chunk_bert": 0.70,
     "generation_antwort_rouge": 0.10,
-
-    # Grauzone-Grenzen
     "grauzone_rouge_min": 0.05,
     "grauzone_rouge_max": 0.25,
 }
 
-# Bekannte Ausweich-Phrasen (exakt, nicht Teilstring)
+# Bekannte Ausweich-Phrasen — erweitert nach qwen/llama Tests (Juni 2026)
 AUSWEICH_PHRASEN = [
+    # Original
     "diese information ist nicht verfügbar",
     "diese information ist nicht verfuegbar",
     "dazu fehlt mir noch was in der susipedia",
     "ich habe keine information dazu",
     "ich kann diese frage nicht beantworten",
     "keine information verfügbar",
+    # Neu — qwen2.5-coder Formulierungen
+    "ich habe keine informationen über",
+    "ich habe keine informationen zu",
+    "ich kann nicht antworten, da ich keine informationen",
+    "leider habe ich keine informationen",
+    "ich bin nicht in der lage, diese frage zu beantworten",
+    "es tut mir leid, aber ich kann diese frage nicht",
+    "ich habe keine direkten informationen",
+    "diese information steht mir nicht zur verfügung",
+    # Neu — llama3.1 Formulierungen
+    "ich muss darauf hinweisen, dass ich keine informationen",
+    "ich habe nach informationen gesucht",
+    "leider habe ich keine direkten informationen",
+    "es ist nicht möglich, genaue informationen",
+    # Englische Ausweicher (Mehrsprachigkeit)
+    "i don't have information about",
+    "i cannot answer this question",
+    "i have no information about",
+    "this information is not available",
 ]
 
 
@@ -80,35 +91,9 @@ def berechne_auto_score(
 ) -> dict:
     """
     Berechnet automatisch einen Score (0-5) aus den Metriken.
-
-    Entscheidungsbaum:
-        1. Ausweichantwort erkannt?        → Score 0
-        2. ROUGE-L < 0.05?
-           + max_chunk_rougeL < 0.10?     → Score 5 (falscher Chunk)
-           + max_chunk_bert > 0.70?       → Score 4 (Generation-Problem)
-           + sonst                        → Score 1 (Halluzination)
-        3. ROUGE-L > 0.25 + BERT > 0.75? → Score 3 (RAG korrekt)
-        4. ROUGE-L > 0.25 + Delta > 0.10? → Score 2 (Training korrekt)
-        5. Alles andere                   → Grauzone (manuell)
-
-    Args:
-        antwort:              Generierte Antwort
-        antwort_bert:         BERTScore Antwort vs Referenz
-        max_chunk_bert:       Bester Chunk BERTScore
-        delta:                antwort_bert - max_chunk_bert
-        antwort_rougeL:       ROUGE-L Antwort vs Referenz
-        max_chunk_rougeL:     Bester Chunk ROUGE-L vs Referenz
-        auto_score_ausweich:  0 wenn Ausweichantwort erkannt (aus evaluator.py)
-
-    Returns:
-        dict mit:
-            score:       int 0-5 oder None (Grauzone)
-            konfidenz:   "hoch" / "mittel" / "grauzone"
-            grund:       Erklärung der Entscheidung
-            manuell:     True wenn manuell nötig
     """
 
-    # Schritt 1 — Ausweichantwort
+    # Schritt 1 — Ausweichantwort via Auto-Score Flag
     if auto_score_ausweich == 0:
         return {
             "score": 0,
@@ -117,7 +102,7 @@ def berechne_auto_score(
             "manuell": False
         }
 
-    # Exakte Phrasen prüfen (Bug-Fix: kein Teilstring-Matching)
+    # Ausweich-Phrasen prüfen (Teilstring-Matching am Anfang)
     if antwort:
         antwort_lower = antwort.lower().strip()
         for phrase in AUSWEICH_PHRASEN:
@@ -125,11 +110,10 @@ def berechne_auto_score(
                 return {
                     "score": 0,
                     "konfidenz": "hoch",
-                    "grund": f"Ausweichantwort erkannt: '{phrase[:40]}...'",
+                    "grund": f"Ausweichantwort erkannt: '{phrase[:50]}'",
                     "manuell": False
                 }
 
-    # Metriken prüfen
     rouge = antwort_rougeL
     bert = antwort_bert
     chunk_rouge = max_chunk_rougeL
@@ -143,10 +127,9 @@ def berechne_auto_score(
             "manuell": True
         }
 
-    # Schritt 2 — ROUGE-L sehr niedrig (Halluzination oder falscher Chunk)
+    # Schritt 2 — ROUGE-L sehr niedrig
     if rouge < SCHWELLEN["ausweich_rouge"]:
 
-        # Score 5 — falscher Chunk (Retrieval in falsche Kategorie)
         if chunk_rouge is not None and chunk_rouge < SCHWELLEN["falscher_chunk_rouge"]:
             return {
                 "score": 5,
@@ -155,7 +138,6 @@ def berechne_auto_score(
                 "manuell": False
             }
 
-        # Score 4 — Generation-Problem (Chunk war gut, Antwort nicht)
         if chunk_bert is not None and chunk_bert > SCHWELLEN["generation_chunk_bert"]:
             return {
                 "score": 4,
@@ -164,7 +146,6 @@ def berechne_auto_score(
                 "manuell": False
             }
 
-        # Score 1 — Halluzination
         return {
             "score": 1,
             "konfidenz": "mittel",
@@ -172,7 +153,7 @@ def berechne_auto_score(
             "manuell": False
         }
 
-    # Schritt 3 — ROUGE-L hoch + BERT hoch → Score 3 (RAG korrekt)
+    # Schritt 3 — ROUGE-L hoch + BERT hoch → Score 3
     if rouge > SCHWELLEN["korrekt_rouge"] and bert > SCHWELLEN["korrekt_bert"]:
         return {
             "score": 3,
@@ -181,7 +162,7 @@ def berechne_auto_score(
             "manuell": False
         }
 
-    # Schritt 4 — ROUGE-L hoch aber Delta positiv → Score 2 (Training)
+    # Schritt 4 — ROUGE-L hoch + Delta positiv → Score 2
     if rouge > SCHWELLEN["korrekt_rouge"] and delta is not None and delta > 0.10:
         return {
             "score": 2,
@@ -203,23 +184,6 @@ def berechne_auto_score(
 
 def zeige_auto_score(result: dict, frage: str, referenz: str, antwort: str,
                      bert_info: dict = None, rouge_info: dict = None) -> Optional[int]:
-    """
-    Zeigt den automatischen Score und fragt bei Grauzone manuell nach.
-
-    Args:
-        result:     Ergebnis von berechne_auto_score()
-        frage:      Fragetext
-        referenz:   Referenzantwort
-        antwort:    Generierte Antwort
-        bert_info:  BERTScore-Ergebnisse
-        rouge_info: ROUGE-L Ergebnisse
-
-    Returns:
-        int: finaler Score (automatisch oder manuell)
-        -1:  übersprungen
-    Raises:
-        KeyboardInterrupt: wenn q gedrückt
-    """
     SCORE_LABELS = {
         0: "Ausweichantwort",
         1: "Halluzination",
@@ -229,20 +193,17 @@ def zeige_auto_score(result: dict, frage: str, referenz: str, antwort: str,
         5: "RAG falsch — falscher Chunk"
     }
 
-    # Automatische Entscheidung
     if not result["manuell"] and result["score"] is not None:
         label = SCORE_LABELS.get(result["score"], "?")
         symbol = "✅" if result["konfidenz"] == "hoch" else "🔶"
         print(f"  {symbol} Auto-Score {result['score']} ({label}) — {result['grund']}")
         return result["score"]
 
-    # Grauzone — manuell
     print(f"\n{'='*60}")
     print(f"❓ FRAGE:\n{frage}\n")
     print(f"✅ REFERENZ:\n{referenz}\n")
     print(f"🤖 SUSI:\n{antwort}\n")
 
-    # Metriken anzeigen
     if bert_info and bert_info.get("antwort_bert") is not None:
         rouge_str = ""
         if rouge_info and rouge_info.get("antwort_rougeL") is not None:
@@ -271,16 +232,6 @@ def zeige_auto_score(result: dict, frage: str, referenz: str, antwort: str,
 # ── Batch-Analyse bestehender CSV ────────────────────────────────
 
 def analysiere_mit_auto_scorer(csv_path: str) -> dict:
-    """
-    Wendet den Auto-Scorer auf eine bestehende CSV an.
-    Nützlich um den Scorer auf alten Daten zu testen.
-
-    Args:
-        csv_path: Pfad zur eval CSV
-
-    Returns:
-        dict mit Statistiken
-    """
     import csv as csv_module
     from pathlib import Path
 
@@ -302,7 +253,6 @@ def analysiere_mit_auto_scorer(csv_path: str) -> dict:
 
     for row in daten:
         stats["gesamt"] += 1
-
         try:
             bert = float(row.get("antwort_bert", "") or 0)
             chunk_bert = float(row.get("max_chunk_bert", "") or 0)
@@ -333,12 +283,9 @@ def analysiere_mit_auto_scorer(csv_path: str) -> dict:
             if result["score"] is not None:
                 stats["score_verteilung"][result["score"]] += 1
 
-            # Mit manuellem Score vergleichen
             manuell = row.get("score_manuell", "")
             if manuell in ("0", "1", "2"):
                 echter = int(manuell)
-                # Mapping: alter Score 0/1/2 → neuer Score 0-5
-                # 0 → 0 oder 1 oder 5, 1 → 2, 2 → 3
                 auto_score = result["score"]
                 if (echter == 0 and auto_score in (0, 1, 4, 5)) or \
                    (echter == 1 and auto_score == 2) or \
@@ -373,6 +320,8 @@ if __name__ == "__main__":
         print(f"   Gesamt          : {gesamt}")
         print(f"   Automatisch     : {auto} ({auto/gesamt*100:.1f}%)")
         print(f"   Grauzone        : {grau} ({grau/gesamt*100:.1f}%)")
+        print(f"   MAX_SCORE       : {MAX_SCORE}")
+        print(f"   KORREKT_THRESHOLD: {KORREKT_THRESHOLD}")
         print(f"\n   Score-Verteilung (automatisch):")
         labels = {0:"Ausweich", 1:"Halluz", 2:"Training", 3:"RAG✅", 4:"RAGGen", 5:"RAGChunk"}
         for s, n in stats["score_verteilung"].items():

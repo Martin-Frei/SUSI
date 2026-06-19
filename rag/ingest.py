@@ -5,41 +5,10 @@ Liest alle Markdown-Dateien aus der SUSIpedia und speichert sie als
 Vektoren in ChromaDB. Nur geänderte oder neue Dateien werden verarbeitet
 (Upsert-Strategie mit MD5-Hashing).
 
-KOMMENTAR-BLÖCKE (NEU):
-    Abschnitte in Markdown-Dateien die mit ##** beginnen und mit **## enden
-    werden beim Indexieren vollständig übersprungen. Diese Blöcke sind für
-    persönliche Notizen, offene Punkte oder temporäre Kommentare gedacht
-    die nicht in ChromaDB landen sollen.
+Konfiguration läuft über rag/susi_config.yaml — keine hardcodierten Werte.
 
-    Beispiel in einer .md Datei:
-        ## Normaler Abschnitt
-        Dieser Text wird indexiert und ist für SUSI abrufbar.
-
-        ##** Offene Punkte **##
-        - Das hier wird ignoriert
-        - Nur Kommentar für den Autor
-        **##
-
-    Alles zwischen ##** und **## wird aus dem Text entfernt bevor
-    die Chunks erzeugt werden.
-
-CHUNK-STRATEGIE:
-    Persönliche Ordner (standard): chunk_size=300, overlap=50
-    Technische Ordner (coding, technik, lernen): chunk_size=500, overlap=100
-    Die Ordner-Erkennung läuft automatisch über TECHNICAL_FOLDERS.
-
-STELLSCHRAUBEN:
-    DOCS_PATH           → Pfad zur SUSIpedia (relativ zum Projektroot)
-    CHROMA_PATH         → Pfad zur ChromaDB
-    HASH_FILE           → Pfad zur Hash-Datei für Änderungserkennung
-    CHUNK_SIZE_DEFAULT  → Chunk-Größe für persönliche Ordner
-    CHUNK_SIZE_TECH     → Chunk-Größe für technische Ordner
-    CHUNK_OVERLAP_DEFAULT → Overlap für persönliche Ordner
-    CHUNK_OVERLAP_TECH  → Overlap für technische Ordner
-    TECHNICAL_FOLDERS   → Liste der Ordner die als technisch gelten
-    COMMENT_START       → Öffnungs-Tag für Kommentar-Blöcke
-    COMMENT_END         → Schließ-Tag für Kommentar-Blöcke
-    EMBED_MODEL         → Ollama Embedding-Modell
+KOMMENTAR-BLÖCKE:
+    Abschnitte zwischen ##** und **## werden beim Indexieren übersprungen.
 
 AUSFÜHREN:
     python rag/ingest.py
@@ -59,88 +28,77 @@ import hashlib
 import json
 import os
 import re
+import yaml
 
-# ── Stellschrauben ────────────────────────────────────────────────────────────
+# ── Config laden ──────────────────────────────────────────────────
+CONFIG_PATH = Path(__file__).parent / "susi_config.yaml"
 
-DOCS_PATH   = "docs"
-CHROMA_PATH = "chroma_db"
-HASH_FILE   = "chroma_db/doc_hashes.json"
+def load_config():
+    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
 
-# Chunk-Größen
-CHUNK_SIZE_DEFAULT    = 300
-CHUNK_SIZE_TECH       = 500
-CHUNK_OVERLAP_DEFAULT = 50
-CHUNK_OVERLAP_TECH    = 100
+cfg = load_config()
 
-# Ordner die als technisch gelten → größere Chunks
-TECHNICAL_FOLDERS = ["coding", "technik", "lernen"]
+# ── Stellschrauben aus Config ─────────────────────────────────────
+DOCS_PATH   = cfg["paths"]["docs"]
+CHROMA_PATH = cfg["retrieval"]["chroma_path"]
+HASH_FILE   = f"{CHROMA_PATH}/doc_hashes.json"
+EMBED_MODEL = cfg["retrieval"]["embedding_model"]
+
+# Chunk-Größen aus Config (mit Fallback auf bewährte Werte)
+ingest_cfg = cfg.get("ingest", {})
+CHUNK_SIZE_DEFAULT    = ingest_cfg.get("chunk_size_default", 1000)
+CHUNK_SIZE_TECH       = ingest_cfg.get("chunk_size_tech", 1000)
+CHUNK_OVERLAP_DEFAULT = ingest_cfg.get("chunk_overlap_default", 50)
+CHUNK_OVERLAP_TECH    = ingest_cfg.get("chunk_overlap_tech", 50)
+
+# Ordner die als technisch gelten
+TECHNICAL_FOLDERS = ingest_cfg.get("technical_folders", ["coding", "technik", "lernen"])
 
 # Kommentar-Block Tags
 COMMENT_START = "##**"
 COMMENT_END   = "**##"
 
-# Embedding-Modell
-EMBED_MODEL = "nomic-embed-text"
-
-# ── Hilfsfunktionen ───────────────────────────────────────────────────────────
+# ── Hilfsfunktionen ───────────────────────────────────────────────
 
 def get_file_hash(filepath: str) -> str:
-    """MD5 Hash einer Datei berechnen."""
     with open(filepath, "rb") as f:
         return hashlib.md5(f.read()).hexdigest()
 
-
 def load_hashes() -> dict:
-    """Gespeicherte Hashes laden."""
     if os.path.exists(HASH_FILE):
         with open(HASH_FILE, "r") as f:
             return json.load(f)
     return {}
 
-
 def save_hashes(hashes: dict):
-    """Aktuelle Hashes speichern."""
     with open(HASH_FILE, "w") as f:
         json.dump(hashes, f, indent=2)
 
-
 def generate_chunk_id(source: str, chunk_index: int) -> str:
-    """Eindeutige ID pro Chunk generieren."""
     return f"{source}::chunk_{chunk_index}"
 
-
 def is_technical(filepath_str: str) -> bool:
-    """
-    Prüft ob eine Datei in einem technischen Ordner liegt.
-    Entscheidet welche Chunk-Größe verwendet wird.
-    """
     return any(folder in filepath_str for folder in TECHNICAL_FOLDERS)
 
-
 def remove_comment_blocks(text: str) -> str:
-    """
-    Entfernt alle Kommentar-Blöcke aus dem Text.
-    Alles zwischen COMMENT_START und COMMENT_END wird gelöscht.
-
-    Beispiel:
-        ##** Offene Punkte **##
-        - wird ignoriert
-        **##
-    """
-    # Regex: alles zwischen ##** und **## entfernen (auch über mehrere Zeilen)
     pattern = re.escape(COMMENT_START) + r".*?" + re.escape(COMMENT_END)
     cleaned = re.sub(pattern, "", text, flags=re.DOTALL)
-    # Doppelte Leerzeilen bereinigen die nach dem Entfernen entstehen
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
 
 
-# ── Haupt-Funktion ────────────────────────────────────────────────────────────
+# ── Haupt-Funktion ────────────────────────────────────────────────
 
 def ingest_docs():
+    print(f"⚙️  Config: {CONFIG_PATH}")
+    print(f"   Embedding : {EMBED_MODEL}")
+    print(f"   ChromaDB  : {CHROMA_PATH}")
+    print(f"   Chunks    : default={CHUNK_SIZE_DEFAULT} | tech={CHUNK_SIZE_TECH}")
+    print()
     print("🔍 Prüfe Dokumentänderungen...")
 
-    saved_hashes  = load_hashes()
+    saved_hashes   = load_hashes()
     current_hashes = {}
     changed_files  = []
     new_files      = []
@@ -148,8 +106,8 @@ def ingest_docs():
     all_files = list(Path(DOCS_PATH).rglob("*.md"))
 
     for filepath in all_files:
-        filepath_str  = str(filepath)
-        current_hash  = get_file_hash(filepath_str)
+        filepath_str = str(filepath)
+        current_hash = get_file_hash(filepath_str)
         current_hashes[filepath_str] = current_hash
 
         if filepath_str not in saved_hashes:
@@ -214,22 +172,17 @@ def ingest_docs():
             separators=["## ", "### ", "\n\n", "\n"]
         )
 
-        # Text in Document-Objekt wrappen für LangChain
         doc = Document(page_content=raw_text, metadata={"source": filepath_str})
         chunks = splitter.split_documents([doc])
-
-        # Leere Chunks rausfiltern
         chunks = [c for c in chunks if c.page_content.strip()]
 
         if not chunks:
             print(f"  ⚠️  Keine verwertbaren Chunks – Datei übersprungen")
             continue
 
-        # Metadata sicherstellen
         for chunk in chunks:
             chunk.metadata["source"] = filepath_str
 
-        # IDs generieren und in ChromaDB speichern
         ids = [generate_chunk_id(filepath_str, i) for i in range(len(chunks))]
         db.add_documents(documents=chunks, ids=ids)
         total_chunks += len(chunks)
