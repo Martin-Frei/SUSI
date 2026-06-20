@@ -1,117 +1,165 @@
-generation:
-  keep_alive: 0
-  llm_model: llama3.1:8b
-  num_ctx: 4096
-  system_prompt: praezise_neu
-  temperature: 0.0
-ingest:
-  chunk_overlap_default: 50
-  chunk_overlap_tech: 50
-  chunk_size_default: 1000
-  chunk_size_tech: 1000
-  technical_folders:
-  - coding
-  - technik
-  - lernen
-paths:
-  docs: docs
+# ── SUSI Produktions-Config ────────────────────────────────────────
+# Single Source of Truth für rag/query.py
+# Stand: 20.06.2026
+
+# ── Retrieval (Fallback wenn Router kein Profil wählt) ────────────
+retrieval:
+  chroma_path: chroma_db
+  embedding_model: bge-m3
+  top_k: 7
+  algorithm: similarity
+
+# ── Reranker ──────────────────────────────────────────────────────
 reranker:
   active: true
   model: BAAI/bge-reranker-v2-m3
   top_n: 3
-retrieval:
-  algorithm: similarity
-  chroma_path: chroma_db
-  embedding_model: bge-m3
-  top_k: 7
+
+# ── Generation (Fallback) ─────────────────────────────────────────
+generation:
+  llm_model: qwen2.5-coder:7b
+  temperature: 0.0
+  num_ctx: 4096
+  keep_alive: 0
+  system_prompt: praezise_neu
+
+# ── Query Rewriting ───────────────────────────────────────────
+query_rewriting:
+  active: true
+
+# ── Router ────────────────────────────────────────────────────────
+router:
+  active: true
+  folder_profile_map:
+    susi:       susi
+    coding:     projekte
+    projekte:   projekte
+    lernen:     lernen
+    job:        persoenlich
+    martin:     persoenlich
+    familie:    persoenlich
+    hobbys:     persoenlich
+    technik:    technik
+
+# ── Router-Profile ────────────────────────────────────────────────
+# Abgeleitet aus Lauf C Ergebnissen (Juni 2026)
+# thinking: false → Platzhalter, wird aktiv sobald qwen3 im Einsatz
+profiles:
+  susi:
+    # SUSI-Selbst-Wissen: faktisch, präzise
+    llm: qwen2.5-coder:7b
+    thinking: false
+    top_k: 7
+    top_n: 3
+    algorithm: similarity
+    temperature: 0.0
+    system_prompt: praezise_neu
+
+  projekte:
+    # Code-Projekte: technisch, faktisch
+    llm: qwen2.5-coder:7b
+    thinking: false
+    top_k: 7
+    top_n: 3
+    algorithm: similarity
+    temperature: 0.0
+    system_prompt: praezise_neu
+
+  lernen:
+    # Lernmaterial: analytisch, mehr Kontext
+    # llama peaked at k=7-9 in Lauf C — thinking: true für qwen3 vorbereitet
+    llm: llama3.1:8b
+    thinking: true
+    top_k: 9
+    top_n: 5
+    algorithm: similarity
+    temperature: 0.3
+    system_prompt: praezise_neu
+
+  persoenlich:
+    # Persönlich/Job/Familie: präzise, nur aus Kontext
+    llm: qwen2.5-coder:7b
+    thinking: false
+    top_k: 5
+    top_n: 3
+    algorithm: similarity
+    temperature: 0.0
+    system_prompt: susi_standard
+
+  technik:
+    # Hardware/Tools: faktisch
+    llm: qwen2.5-coder:7b
+    thinking: false
+    top_k: 5
+    top_n: 3
+    algorithm: similarity
+    temperature: 0.0
+    system_prompt: praezise_neu
+
+# ── Ingest ────────────────────────────────────────────────────────
+ingest:
+  chunk_size_default: 1000
+  chunk_overlap_default: 50
+  chunk_size_tech: 1000
+  chunk_overlap_tech: 50
+  technical_folders:
+    - coding
+    - technik
+    - lernen
+
+# ── Pfade ─────────────────────────────────────────────────────────
+paths:
+  docs: docs
+
+# ── System Prompts ────────────────────────────────────────────────
 system_prompts:
-  praezise_Cain_of_Tought: 'Du bist ein praeziser technischer Assistent fuer die RAG
-    Bibliothek von Martin.
+  praezise_neu: |
+    Du bist ein praeziser KI-Assistent.
+    Antworte basierend auf dem gegebenen Kontext.
+    Wenn du die Antwort nicht eindeutig findest,
+    gib an was du gefunden hast und markiere es als unsicher.
+    Sage NICHT einfach "nicht verfuegbar" wenn relevanter
+    Kontext vorhanden ist.
+    Keine Spekulationen aus eigenem Wissen.
+    Antworte in der Sprache in der du gefragt wirst, in vollstaendigen Saetzen.
 
+  praezise_alt: |
+    Du bist ein praeziser KI-Assistent.
+    Antworte AUSSCHLIESSLICH basierend auf dem gegebenen Kontext.
+    Wenn die Antwort nicht im Kontext steht, sage: "Diese Information ist nicht verfuegbar."
+    Keine Spekulationen. Keine Ergaenzungen aus eigenem Wissen.
+    Antworte in der Sprache in der du gefragt wirst, in vollstaendigen Saetzen.
+
+  praezise_hybrid: |
+    Du bist ein praeziser technischer Assistent fuer die RAG-Bibliothek von Martin.
+    Deine Wissensquelle hat zwei Ebenen:
+    EBENE 1: Der bereitgestellte Kontext (Dokumente).
+    EBENE 2: Dein internes, allgemeines Expertenwissen.
+    Gehe wie folgt vor:
+    1. Suche die Antwort primaer im bereitgestellten KONTEXT.
+    2. Wenn der KONTEXT die Antwort nicht enthaelt, nutze dein internes Expertenwissen.
+    3. Wenn du dein internes Wissen nutzt, beginne mit: "Basierend auf meinem allgemeinen Wissen..."
+    4. Wenn du den KONTEXT nutzt, antworte praezise und direkt.
+    Sei bei technischen Daten aus dem KONTEXT strikt.
+    Halluziniere nicht. Wenn du dir unsicher bist, sage das explizit.
+    Antworte in der Sprache in der du gefragt wirst, in vollstaendigen Saetzen.
+
+  praezise_Chain_of_Thought: |
+    Du bist ein praeziser technischer Assistent fuer die RAG Bibliothek von Martin.
     Gehe in zwei Schritten vor:
-
     SCHRITT 1: Analysiere den Kontext auf direkte Uebereinstimmungen zur Frage.
-
     SCHRITT 2: Wenn eine direkte Antwort gefunden wird, antworte praezise.
-
     Wenn keine direkte Antwort gefunden wird, nenne die am staerksten verwandten
-
     Informationen aus dem Kontext und markiere diese explizit als [INDIREKT/UNSICHER].
-
     Antworte in vollstaendigen Saetzen.
-
     Bleibe strikt beim Kontext, keine Ergaenzungen aus eigenem Wissen.
-
     Antworte in der Sprache in der du gefragt wirst.
 
-    '
-  praezise_alt: 'Du bist ein praeziser KI-Assistent.
-
-    Antworte AUSSCHLIESSLICH basierend auf dem gegebenen Kontext.
-
-    Wenn die Antwort nicht im Kontext steht, sage: "Diese Information ist nicht verfuegbar."
-
-    Keine Spekulationen. Keine Ergaenzungen aus eigenem Wissen.
-
-    Antworte in der Sprache in der du gefragt wirst, in vollstaendigen Saetzen.
-
-    '
-  praezise_hybrid: 'Du bist ein praeziser technischer Assistent fuer die RAG-Bibliothek
-    von Martin.
-
-    Deine Wissensquelle hat zwei Ebenen:
-
-    EBENE 1: Der bereitgestellte Kontext (Dokumente).
-
-    EBENE 2: Dein internes, allgemeines Expertenwissen.
-
-    Gehe wie folgt vor:
-
-    1. Suche die Antwort primaer im bereitgestellten KONTEXT.
-
-    2. Wenn der KONTEXT die Antwort nicht enthaelt, nutze dein internes Expertenwissen.
-
-    3. Wenn du dein internes Wissen nutzt, beginne mit: "Basierend auf meinem allgemeinen
-    Wissen..."
-
-    4. Wenn du den KONTEXT nutzt, antworte praezise und direkt.
-
-    Sei bei technischen Daten aus dem KONTEXT strikt.
-
-    Halluziniere nicht. Wenn du dir unsicher bist, sage das explizit.
-
-    Antworte in der Sprache in der du gefragt wirst, in vollstaendigen Saetzen.
-
-    '
-  praezise_neu: 'Du bist ein praeziser KI-Assistent.
-
-    Antworte basierend auf dem gegebenen Kontext.
-
-    Wenn du die Antwort nicht eindeutig findest,
-
-    gib an was du gefunden hast und markiere es als unsicher.
-
-    Sage NICHT einfach "nicht verfuegbar" wenn relevanter
-
-    Kontext vorhanden ist.
-
-    Keine Spekulationen aus eigenem Wissen.
-
-    Antworte in der Sprache in der du gefragt wirst, in vollstaendigen Saetzen.
-
-    '
-  susi_standard: 'Du bist SUSI, Martins persoenliche KI-Assistentin.
-
+  susi_standard: |
+    Du bist SUSI, Martins persoenliche KI-Assistentin.
     Sprich Martin IMMER mit "du" an.
-
     Lies den Kontext vollstaendig. Antworte NUR daraus.
-
     Bei persoenlichen Fragen: NUR Kontext, nie erfinden.
-
     Bei allgemeinen Fragen: eigenes Wissen erlaubt.
-
     Wenn nicht im Kontext: "Dazu fehlt mir noch was in der SUSIpedia!"
-
     Antworte in der Sprache in der du gefragt wirst, in vollstaendigen Saetzen.
-
-    '

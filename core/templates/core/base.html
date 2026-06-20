@@ -1,5 +1,4 @@
 {% load static %}
-<script src="{% static 'core/js/htmx.min.js' %}" defer></script>
 
 <!DOCTYPE html>
 <html lang="de">
@@ -8,15 +7,65 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{% block title %}SUSI{% endblock %}</title>
 
-    <!-- Google Fonts: JetBrains Mono + Syne -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <!-- Favicon — Icon im Browser-Tab -->
     <link
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Syne:wght@400;700;800&display=swap"
-      rel="stylesheet"
+      rel="icon"
+      type="image/svg+xml"
+      href="{% static 'core/img/susi_icon.svg' %}"
     />
 
+    <script src="{% static 'core/js/htmx.min.js' %}" defer></script>
+
     <style>
-      /* ── Design System ─────────────────────────────────── */
+      /* ── Lokale Fonts ─────────────────────────────────── */
+      @font-face {
+        font-family: "JetBrains Mono";
+        src: url("{% static 'core/fonts/JetBrainsMono-Light.ttf' %}")
+          format("truetype");
+        font-weight: 300;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "JetBrains Mono";
+        src: url("{% static 'core/fonts/JetBrainsMono-Regular.ttf' %}")
+          format("truetype");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "JetBrains Mono";
+        src: url("{% static 'core/fonts/JetBrainsMono-SemiBold.ttf' %}")
+          format("truetype");
+        font-weight: 600;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "Syne";
+        src: url("{% static 'core/fonts/Syne-Regular.ttf' %}")
+          format("truetype");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "Syne";
+        src: url("{% static 'core/fonts/Syne-Bold.ttf' %}") format("truetype");
+        font-weight: 700;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "Syne";
+        src: url("{% static 'core/fonts/Syne-ExtraBold.ttf' %}")
+          format("truetype");
+        font-weight: 800;
+        font-style: normal;
+        font-display: swap;
+      }
+      /* ── Design System ── */
       :root {
         --bg: #0a0c10;
         --bg-panel: #0f1117;

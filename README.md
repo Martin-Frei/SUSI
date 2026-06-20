@@ -19,6 +19,23 @@ Das System kombiniert **Retrieval-Augmented Generation (RAG)** mit lokalen LLMs 
 
 ---
 
+## Query Rewriting in Action
+
+![SUSI Chat](screenshots/SUSI_Chat.jpg)
+
+Der Screenshot zeigt die Entwicklung der Antwortqualität durch Query Rewriting und SUSIpedia-Optimierung:
+
+| Frage | Ergebnis | Tokens |
+|---|---|---|
+| "Hallo SUSI Ich bin Martin Wo wohne ich??" | ❌ Falsch — verweist auf Wohnungssuche-Kategorie | 76 |
+| "Wo wohnt Martin Freimuth??" | ✅ Richtig — 3. Person direkt | 13 |
+| "Ich bin Martin. Wo wohne ich" | ✅ Richtig — dank `ich_bin_martin.md` | 23 |
+| "Ich bin Martin wo wohne ich ??" | ✅ Richtig — Query Rewriting + Reranker | 25 |
+
+**Erkenntnis:** Query Rewriting schreibt Ich-Form Fragen automatisch in optimale Suchanfragen um. Kürzere Antworten, höhere Präzision, korrekte Profil-Auswahl durch den Router.
+
+---
+
 ## Tech Stack
 
 | Komponente | Technologie |
@@ -54,8 +71,9 @@ SUSI/
 │   └── hobbys/                  ← Interessen, Freizeit
 ├── rag/
 │   ├── ingest.py                ← Markdown → ChromaDB (Upsert mit MD5-Hash)
-│   ├── query.py                 ← Frage → Retrieval → Reranker → LLM → Antwort
-│   └── susi_config.yaml         ← Alle Parameter zentral
+│   ├── query.py                 ← Query Rewriting → Retrieval → Reranker → Router → LLM → Antwort
+│   ├── router.py                ← Retrieval-getriebener Profil-Router
+│   └── susi_config.yaml         ← Alle Parameter zentral (inkl. Router-Profile)
 ├── core/                        ← Django App (Views, URLs, Templates)
 ├── susi_project/                ← Django Settings
 ├── tools/
@@ -118,16 +136,42 @@ python rag/ingest.py
 ```
 Frage eingeben
      ↓
-Frage → Embedding (bge-m3)
+Query Rewriting — LLM schreibt Frage in optimale Suchanfrage um
+("Ich bin Martin. Wo wohne ich?" → "Wo wohnt Martin Freimuth?")
      ↓
-ChromaDB: Top-k ähnliche Chunks aus SUSIpedia (similarity oder MMR)
+Embedding (bge-m3) → ChromaDB: Top-k ähnliche Chunks (similarity oder MMR)
      ↓
 bge-reranker-v2-m3: Chunks neu sortieren → Top-n behalten
      ↓
-Chunks + Frage + System Prompt → Ollama LLM (qwen2.5-coder:7b)
+Router: Ordnerpfad der Top-Chunks bestimmt Profil (LLM + Parameter)
+     ↓
+Chunks + Original-Frage + System Prompt → Ollama LLM
      ↓
 Antwort + Quellen + tok/s Metriken → Django/HTMX Frontend
 ```
+
+---
+
+## Retrieval-getriebener Router
+
+Das Herzstück von SUSI: Nicht Keyword-Matching sondern die **SUSIpedia-Ordnerstruktur selbst** bestimmt welches LLM und welche Parameter genutzt werden.
+
+```python
+# Beispiel Voting:
+# Chunk 1 (score=0.92) aus coding/  → projekte: 0.92
+# Chunk 2 (score=0.71) aus lernen/  → lernen:   0.71
+# Chunk 3 (score=0.68) aus lernen/  → lernen:  +0.68 = 1.39  ← Gewinner
+```
+
+| Profil | LLM | top_k | Einsatz |
+|---|---|---|---|
+| susi | qwen2.5-coder:7b | 7 | SUSI-Selbstwissen |
+| projekte | qwen2.5-coder:7b | 7 | Code-Projekte |
+| lernen | llama3.1:8b | 9 | Lernmaterial, Konzepte |
+| persoenlich | qwen2.5-coder:7b | 5 | Persönliches, Job |
+| technik | qwen2.5-coder:7b | 5 | Hardware, Tools |
+
+Profile sind in `susi_config.yaml` definiert und enthalten bereits einen `thinking`-Flag für kommende qwen3-Modelle.
 
 ---
 
@@ -178,9 +222,9 @@ python tools/evaluation/grid_run.py --dry-run --mode full --config tools/evaluat
 | qwen2.5-coder:7b | 3.02 / 3.0 | 100% |
 | llama3.1:8b | 2.98 / 3.0 | 99% |
 
-**Reranker-Vergleich (Smoke Test):**
+**Reranker-Vergleich:**
 
-| Reranker | Mit Reranker (k≥5) |
+| Reranker | Korrektheit |
 |---|---|
 | amberoad/bert-multilingual | 59% ❌ |
 | **BAAI/bge-reranker-v2-m3** | **97%** ✅ |
@@ -195,11 +239,12 @@ SUSIpedia-Formatierung und Chunk-Size-Erhöhung (300 → 1000 Tokens).
 
 ### Stufe 1 – Coding Assistent (aktiv ✅)
 Lokaler RAG mit Ollama + ChromaDB + LangChain + Django/HTMX.  
-Vollständiges Evaluation Framework. Multilingualer Reranker.
+Vollständiges Evaluation Framework. Multilingualer Reranker. Query Rewriting.
 
-### Stufe 2 – Retrieval-getriebener Router (in Entwicklung 🔧)
+### Stufe 2 – Retrieval-getriebener Router (fertig ✅)
 Dynamische Profil-Auswahl basierend auf den retrievten SUSIpedia-Ordnern.  
-Die Wissensbasis-Struktur bestimmt LLM, top_k und Parameter — kein Keyword-Matching.
+Die Wissensbasis-Struktur bestimmt LLM, top_k und Parameter — kein Keyword-Matching.  
+`thinking`-Flag vorbereitet für qwen3-Modelle.
 
 ### Stufe 3 – Physischer Assistent (geplant)
 Arduino + Raspberry Pi · Sensoren · Smart Home via Home Assistant.
@@ -214,6 +259,7 @@ Vollständiges Second Brain · LangChain Agents · eigenständiges Handeln.
 - Läuft vollständig lokal, keine Cloud-Abhängigkeiten
 - Festplatte verschlüsselt via BitLocker
 - Keine Telemetrie, keine externen API-Calls
+- Lokale Fonts (keine Google Fonts), kein externer Request
 
 ---
 
@@ -239,7 +285,7 @@ SUSI is a fully local RAG assistant — no cloud, no external APIs, no data leav
 - Biggest improvement: document quality (Hit Rate 36% → 91%), not model tuning
 - Wrong reranker actively harmful: amberoad 59% vs bge-reranker-v2-m3 97%
 
-**Next:** Retrieval-driven router — the knowledge base folder structure determines which LLM and parameters to use. No keyword matching, no extra model call.
+**Architecture:** Query Rewriting → Retrieval (bge-m3) → Reranker (bge-reranker-v2-m3) → Retrieval-driven Router → LLM (qwen2.5-coder:7b / llama3.1:8b)
 
 ---
 

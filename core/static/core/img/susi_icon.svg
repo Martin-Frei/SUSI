@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="90 55 500 580" role="img">
+  <title>SUSI Icon</title>
+  <desc>SUSI Schild Icon mit S</desc>
+
+  <defs>
+    <clipPath id="shield-clip">
+      <path d="M340,62 L582,152 L582,385 Q582,530 340,628 Q98,530 98,385 L98,152 Z"/>
+    </clipPath>
+  </defs>
+
+  <!-- Schild Hintergrund -->
+  <path fill="#12122a" d="M340,62 L582,152 L582,385 Q582,530 340,628 Q98,530 98,385 L98,152 Z"/>
+
+  <!-- S mit Clip -->
+  <text
+    x="340"
+    y="450"
+    text-anchor="middle"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="370"
+    font-weight="700"
+    fill="#9A7000"
+    clip-path="url(#shield-clip)"
+  >S</text>
+
+  <!-- Goldener Außenrand -->
+  <path fill="none" stroke="#9A7000" stroke-width="16" d="M340,62 L582,152 L582,385 Q582,530 340,628 Q98,530 98,385 L98,152 Z"/>
+
+  <!-- Innerer Goldrand -->
+  <path fill="none" stroke="#9A7000" stroke-width="3" d="M340,96 L554,178 L554,384 Q554,514 340,604 Q126,514 126,384 L126,178 Z"/>
+</svg>

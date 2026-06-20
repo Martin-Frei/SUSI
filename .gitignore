@@ -67,4 +67,5 @@ tools/evaluation/results/*.json
 # Blockiert lokalen Konfigurations-Müll deiner Editoren
 .vscode/*.json
 .idea/*.json
+
 .claude/

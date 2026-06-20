@@ -13,6 +13,8 @@ from langchain_chroma import Chroma
 from sentence_transformers import CrossEncoder
 import pytz
 
+from rag.router import get_profile, apply_profile
+
 # ── Config laden ──────────────────────────────────────────────────
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "susi_config.yaml")
 
@@ -22,24 +24,17 @@ def load_config():
 
 cfg = load_config()
 
-CHROMA_PATH      = cfg["retrieval"]["chroma_path"]
-DOCS_PATH        = cfg["paths"]["docs"]
-EMBEDDING_MODEL  = cfg["retrieval"]["embedding_model"]
-TOP_K            = cfg["retrieval"]["top_k"]
-ALGORITHM        = cfg["retrieval"]["algorithm"]
-LLM_MODEL        = cfg["generation"]["llm_model"]
-TEMPERATURE      = cfg["generation"]["temperature"]
-NUM_CTX          = cfg["generation"]["num_ctx"]
-KEEP_ALIVE       = cfg["generation"]["keep_alive"]
-PROMPT_NAME      = cfg["generation"]["system_prompt"]
-SYSTEM_PROMPT    = cfg["system_prompts"][PROMPT_NAME]
-OLLAMA_URL       = "http://localhost:11434/api/generate"
+CHROMA_PATH     = cfg["retrieval"]["chroma_path"]
+DOCS_PATH       = cfg["paths"]["docs"]
+EMBEDDING_MODEL = cfg["retrieval"]["embedding_model"]
+LLM_MODEL       = cfg["generation"]["llm_model"]
+KEEP_ALIVE      = cfg["generation"]["keep_alive"]
+OLLAMA_URL      = "http://localhost:11434/api/generate"
 
-# ── Reranker ──────────────────────────────────────────────────────
-_reranker_cfg    = cfg.get("reranker", {})
-RERANKER_ACTIVE  = _reranker_cfg.get("active", False)
-RERANKER_MODEL   = _reranker_cfg.get("model", "cross-encoder/ms-marco-MiniLM-L-6-v2")
-RERANKER_TOP_N   = _reranker_cfg.get("top_n", 3)
+# ── Reranker (einmalig laden) ──────────────────────────────────────
+_reranker_cfg   = cfg.get("reranker", {})
+RERANKER_ACTIVE = _reranker_cfg.get("active", False)
+RERANKER_MODEL  = _reranker_cfg.get("model", "BAAI/bge-reranker-v2-m3")
 
 _reranker = None
 def get_reranker():
@@ -82,61 +77,147 @@ def get_date():
     return datetime.now(tz).strftime("%d.%m.%Y %H:%M")
 
 
+# ── Query Rewriting ───────────────────────────────────────────────
+def rewrite_query(question: str, llm_model: str, keep_alive: int) -> str:
+    """
+    Schreibt eine Frage in eine optimale Suchanfrage um.
+    Löst Ich-Form, vage Referenzen und Folgefragen auf.
+    Gibt die umgeschriebene Frage zurück — oder die Original-Frage wenn kein Rewriting nötig.
+    """
+    prompt = f"""Du bist ein Query-Rewriting-Assistent für ein RAG-System.
+Der Nutzer ist Martin Freimuth, ein 54-jähriger Python/ML-Entwickler aus Schechen bei Rosenheim.
+
+Deine Aufgabe: Schreibe die Frage so um, dass sie als eigenständige Suchanfrage funktioniert.
+Regeln:
+- "Ich" → "Martin Freimuth"
+- "mein/meine/mir/mich" → passende 3. Person
+- Vage Referenzen auflösen (z.B. "das Projekt" → konkreter Name wenn erkennbar)
+- Wenn die Frage bereits klar ist, gib sie unverändert zurück
+- Antworte NUR mit der umgeschriebenen Frage, kein Kommentar, keine Erklärung
+
+Frage: {question}
+Umgeschrieben:"""
+
+    payload = {
+        "model":      llm_model,
+        "prompt":     prompt,
+        "stream":     False,
+        "keep_alive": keep_alive,
+        "options": {
+            "temperature": 0.0,
+            "num_ctx":     512,
+        }
+    }
+
+    try:
+        r = requests.post(OLLAMA_URL, json=payload, timeout=30)
+        rewritten = r.json().get("response", "").strip()
+        # Sicherheit: wenn Rewriting leer oder zu lang → Original behalten
+        if not rewritten or len(rewritten) > len(question) * 3:
+            return question
+        print(f"  ✏️  Query Rewriting: '{question}' → '{rewritten}'")
+        return rewritten
+    except Exception:
+        return question
+
+
 # ── Kern-Funktion ─────────────────────────────────────────────────
 def ask_susi(question):
     """
     Stellt eine Frage an SUSI und gibt ein Dict zurück:
     {
-        "answer":            str,
-        "tok_per_sec":       float,
-        "antwortzeit_sek":   float,
-        "tokens_generiert":  int,
-        "quelldateien":      list[str],
-        "llm_model":         str,
-        "embedding_model":   str,
+        "answer":                str,
+        "tok_per_sec":           float,
+        "antwortzeit_sek":       float,
+        "tokens_generiert":      int,
+        "quelldateien":          list[str],
+        "llm_model":             str,
+        "embedding_model":       str,
+        "reranker_used":         bool,
+        "chunks_gefunden":       int,
+        "chunks_nach_reranking": int,
+        "router_profil":         str,
+        "thinking":              bool,
+        "rewritten_query":       str,
     }
     """
     now = get_time()
 
     # Config frisch laden (damit Frontend-Änderungen sofort wirken)
     cfg = load_config()
-    top_k       = cfg["retrieval"]["top_k"]
-    algorithm   = cfg["retrieval"]["algorithm"]
-    llm_model   = cfg["generation"]["llm_model"]
-    temperature = cfg["generation"]["temperature"]
-    num_ctx     = cfg["generation"]["num_ctx"]
-    keep_alive  = cfg["generation"]["keep_alive"]
-    prompt_name = cfg["generation"]["system_prompt"]
-    system_prompt = cfg["system_prompts"][prompt_name]
+
+    # Fallback-Parameter aus Config
+    top_k           = cfg["retrieval"]["top_k"]
+    algorithm       = cfg["retrieval"]["algorithm"]
+    llm_model       = cfg["generation"]["llm_model"]
+    temperature     = cfg["generation"]["temperature"]
+    num_ctx         = cfg["generation"]["num_ctx"]
+    keep_alive      = cfg["generation"]["keep_alive"]
+    prompt_name     = cfg["generation"]["system_prompt"]
+    system_prompt   = cfg["system_prompts"][prompt_name]
+    thinking        = False
+
     reranker_active = cfg.get("reranker", {}).get("active", False)
     reranker_top_n  = cfg.get("reranker", {}).get("top_n", 3)
+    router_active   = cfg.get("router", {}).get("active", False)
+    query_rewrite   = cfg.get("query_rewriting", {}).get("active", True)
+    router_profil   = "fallback"
 
-    # 1. Retrieval
+    # 0. Query Rewriting — vor dem Retrieval
+    rewritten_query = question
+    if query_rewrite:
+        rewritten_query = rewrite_query(question, llm_model, keep_alive)
+
+    # 1. Retrieval (mit umgeschriebener Frage)
     embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
     db = Chroma(persist_directory=CHROMA_PATH, embedding_function=embeddings)
 
     if algorithm == "mmr":
-        docs = db.max_marginal_relevance_search(question, k=top_k)
+        docs = db.max_marginal_relevance_search(rewritten_query, k=top_k)
     else:
-        docs = db.similarity_search(question, k=top_k)
+        docs = db.similarity_search(rewritten_query, k=top_k)
 
-    # 1b. Reranker (optional)
     chunks_gefunden = len(docs)
+
+    # 2. Reranking
     reranker_used = False
+    ranked_docs = []
+
     if reranker_active:
         reranker = get_reranker()
         if reranker:
-            pairs = [(question, doc.page_content) for doc in docs]
+            pairs = [(rewritten_query, doc.page_content) for doc in docs]
             scores = reranker.predict(pairs)
-            ranked = sorted(zip(scores, docs), key=lambda x: x[0], reverse=True)
-            docs = [doc for _, doc in ranked[:reranker_top_n]]
+            ranked_docs = sorted(
+                zip([float(s) for s in scores], docs),
+                key=lambda x: x[0],
+                reverse=True
+            )
+            docs = [doc for _, doc in ranked_docs[:reranker_top_n]]
             reranker_used = True
-    chunks_nach_reranking = len(docs)
 
+    # 3. Router — Profil anhand der Top-Chunks bestimmen
+    if router_active and ranked_docs:
+        folder_profile_map = cfg.get("router", {}).get("folder_profile_map", {})
+        profiles           = cfg.get("profiles", {})
+        system_prompts     = cfg.get("system_prompts", {})
+
+        profil_name, profil_config = get_profile(ranked_docs[:reranker_top_n], folder_profile_map, profiles)
+        params = apply_profile(profil_config, system_prompts)
+
+        llm_model     = params["llm_model"]
+        temperature   = params["temperature"]
+        system_prompt = params["system_prompt"]
+        thinking      = params["thinking"]
+        router_profil = profil_name
+
+        print(f"  🤖 LLM: {llm_model} | thinking: {thinking} | t={temperature}")
+
+    # 4. Kontext zusammenbauen
     context = "\n\n".join([doc.page_content for doc in docs])
     quelldateien = list({doc.metadata.get("source", "?") for doc in docs})
 
-    # 2. Prompt bauen
+    # 5. Prompt bauen (Original-Frage ans LLM, nicht die umgeschriebene)
     prompt = f"""{system_prompt}
 
 Heute ist: {now}
@@ -148,18 +229,23 @@ Frage: {question}
 
 Antwort:"""
 
-    # 3. LLM via Ollama REST API (liefert tok/s Metriken)
+    # 6. Ollama-Payload
+    options = {
+        "temperature": temperature,
+        "num_ctx":     num_ctx,
+    }
+    if thinking:
+        options["thinking"] = True
+
     payload = {
         "model":      llm_model,
         "prompt":     prompt,
         "stream":     False,
         "keep_alive": keep_alive,
-        "options": {
-            "temperature": temperature,
-            "num_ctx":     num_ctx,
-        }
+        "options":    options,
     }
 
+    # 7. LLM aufrufen
     start = time.time()
     response = requests.post(OLLAMA_URL, json=payload, timeout=120)
     response.raise_for_status()
@@ -168,20 +254,23 @@ Antwort:"""
     data = response.json()
 
     eval_count    = data.get("eval_count", 0)
-    eval_duration = data.get("eval_duration", 1)   # Nanosekunden
+    eval_duration = data.get("eval_duration", 1)
     tok_per_sec   = round(eval_count / eval_duration * 1e9, 1) if eval_duration > 0 else 0.0
 
     return {
-        "answer":           data.get("response", "").strip(),
-        "tok_per_sec":      tok_per_sec,
-        "antwortzeit_sek":  wall_time,
-        "tokens_generiert": eval_count,
-        "quelldateien":     quelldateien,
-        "llm_model":        llm_model,
-        "embedding_model":  EMBEDDING_MODEL,
+        "answer":                data.get("response", "").strip(),
+        "tok_per_sec":           tok_per_sec,
+        "antwortzeit_sek":       wall_time,
+        "tokens_generiert":      eval_count,
+        "quelldateien":          quelldateien,
+        "llm_model":             llm_model,
+        "embedding_model":       EMBEDDING_MODEL,
         "reranker_used":         reranker_used,
         "chunks_gefunden":       chunks_gefunden,
         "chunks_nach_reranking": len(docs),
+        "router_profil":         router_profil,
+        "thinking":              thinking,
+        "rewritten_query":       rewritten_query,
     }
 
 
@@ -189,7 +278,8 @@ Antwort:"""
 def debug_retrieval(question):
     embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
     db = Chroma(persist_directory=CHROMA_PATH, embedding_function=embeddings)
-    docs = db.similarity_search(question, k=TOP_K)
+    top_k = load_config()["retrieval"]["top_k"]
+    docs = db.similarity_search(question, k=top_k)
     print("\n🔍 DEBUG – Gefundene Chunks:")
     for i, doc in enumerate(docs, 1):
         source = doc.metadata.get("source", "?")
@@ -226,7 +316,7 @@ def get_suggestions(question, answer):
         folder: sum(1 for kw in keywords if kw in combined)
         for folder, keywords in TOPIC_KEYWORDS.items()
     }
-    top2 = sorted((f for f in scores if scores[f] > 0), key=scores.get, reverse=True)[:2]
+    top2 = sorted((f for f in scores if scores[f] > 0), key=lambda f: scores[f], reverse=True)[:2]
     return top2 if top2 else ["persoenlich/"]
 
 
@@ -306,7 +396,7 @@ def show_save_prompt(question, answer):
 
 # ── CLI ───────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    print(f"🤖 SUSI ist bereit! (LLM: {LLM_MODEL} | Embed: {EMBEDDING_MODEL})")
+    print(f"🤖 SUSI ist bereit! (Embed: {EMBEDDING_MODEL} | Reranker: {RERANKER_MODEL})")
     print("   exit zum Beenden\n")
 
     while True:
@@ -315,8 +405,10 @@ if __name__ == "__main__":
             break
 
         result = ask_susi(question)
+        profil_info   = f"Profil: {result['router_profil']}"
+        thinking_info = " | 🧠 thinking" if result["thinking"] else ""
         print(f"\nSUSI: {result['answer']}")
-        print(f"      ⚡ {result['tok_per_sec']} tok/s · {result['tokens_generiert']} Tokens · {result['antwortzeit_sek']}s\n")
+        print(f"      ⚡ {result['tok_per_sec']} tok/s · {result['tokens_generiert']} Tokens · {result['antwortzeit_sek']}s · {profil_info}{thinking_info}\n")
 
         if worth_saving(question):
             if susi_evaluates(question, result["answer"]):
