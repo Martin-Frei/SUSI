@@ -23,36 +23,43 @@ SUSIpedia ist in Lebensbereiche gegliedert. Die Struktur folgt nicht technischen
 
 ```
 docs/
-├── susipedia_formatierungsregeln.md   ← Formatregeln für alle Dateien
-├── susi_vision.md                     ← Langfristige Vision
-├── tree.md                            ← Strukturübersicht
+├── susi/                              ← NEU (vorher coding/susi/ + root)
+│   ├── susipedia_formatierungsregeln.md
+│   ├── susi_vision.md
+│   └── ...                            ← SUSI-Entwicklungsdokumentation
 │
 ├── coding/                            ← Technische Projekte
-│   ├── gmm/                           ← Global Market Mood
-│   ├── houseofstocks/                 ← HouseOfStocks Projekt
-│   ├── portfolio/                     ← Portfolio Website
-│   ├── stockpredict/                  ← StockPredict V2
-│   └── susi/                          ← SUSI selbst
+│   ├── gmm/
+│   ├── houseofstocks/
+│   ├── portfolio/
+│   └── stockpredict/
 │
 ├── projekte/                          ← Projektübersichten
-│   ├── gmm/                           ← GMM Detaildoku
-│   ├── spv2/                          ← StockPredict V2 Detaildoku
-│   └── pc_umbau/                      ← Hardware-Planung
+│   ├── gmm/
+│   ├── spv2/
+│   └── pc_umbau/
 │
 ├── technik/                           ← Technische Konfiguration
-│   ├── rag_einstellungen.md
-│   └── susi_grenzen_und_roadmap.md
-│
 ├── lernen/                            ← Lernmaterial [nicht öffentlich]
 ├── martin/                            ← Persönliche Daten [nicht öffentlich]
-├── job/                               ← Bewerbungen [nicht öffentlich]
-├── familie/                           ← Familiäres [nicht öffentlich]
-├── hobbys/                            ← Hobbys [nicht öffentlich]
-├── tagebuch/                          ← Persönliches [nicht öffentlich]
-└── persoenlich/                       ← Reflexionen [nicht öffentlich]
+│   └── ich_bin_martin.md              ← Selbstreferenz für Query Rewriting
+├── job/                               ← Bewerbungen (skills/ integriert)
+├── familie/
+├── hobbys/
+├── tagebuch/
+└── persoenlich/
 ```
 
-**Stand 10.06.2026:** Die Wissensbasis umfasst 124 indexierte Markdown-Dateien über alle Bereiche. Die vollständige Überarbeitung aller Dateien nach den aktuellen Formatierungsregeln wurde am 10.06.2026 abgeschlossen — ein mehrstündiger manueller Prozess der die Retrieval Hit Rate von 36% auf 91% angehoben hat. Davon sind `coding/`, `projekte/` und `technik/` öffentlich auf GitHub einsehbar. Alle anderen Bereiche sind bewusst ausgeschlossen.
+**Stand Juni 2026:** Die Wissensbasis umfasst 124 Dateien mit 617 Chunks in ChromaDB. 
+Die vollständige Überarbeitung nach den Formatierungsregeln hat die Retrieval Hit Rate 
+von 36% auf 91% angehoben. Davon sind `coding/`, `projekte/`, `technik/` und `susi/` 
+öffentlich auf GitHub einsehbar. Alle anderen Bereiche sind bewusst ausgeschlossen.
+
+Die Datei `docs/martin/ich_bin_martin.md` enthält Selbstreferenz-Sätze wie 
+„Ich bin Martin Freimuth" und „Ich wohne in Schechen". Sie dient zusammen 
+mit dem Query Rewriting dazu, Ich-Form-Fragen („Wo wohne ich?") korrekt 
+aufzulösen — ein Problem, das Embedding-Modelle alleine nicht lösen können 
+(→ siehe Kapitel 02 und 08).
 
 → *GitHub-Strategie und Datensicherheit: siehe Abschnitt unten*
 
@@ -219,6 +226,7 @@ Danach wurde die Remote-Verbindung neu gesetzt und die bereinigte History mit `-
 
 ---
 
-*→ Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
-*→ Weiter: [susi_04_evaluation.md](susi_04_evaluation.md)*  
+→ *Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
+→ *Weiter: [susi_04_evaluation.md](susi_04_evaluation.md)*  
+→ *Produktivbetrieb: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*  
 *Stand: Juni 2026 · Martin Freimuth*

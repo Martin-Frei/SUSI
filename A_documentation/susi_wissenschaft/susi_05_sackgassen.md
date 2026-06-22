@@ -14,7 +14,7 @@ Der Auslöser für die kritische Analyse war das formale Evaluierungsframework. 
 ## Sackgasse A — Die vollautomatisierte Auto-Save-Pipeline *(Self-Poisoning)*
 
 **Zeitraum:** März – Mai 2026  
-**Status:** Verworfen
+**Status:** Deaktiviert (Mai 2026)
 
 **Der Ansatz:** SUSI sollte über einen regelbasierten Filter (`worth_saving()`) und eine LLM-Selbstevaluation (`susi_evaluates()`) eigenständig entscheiden wann eine Konversation als Markdown in die SUSIpedia zurückgeschrieben wird. Der Keyword-Router (`TOPIC_KEYWORDS`) schlug den Zielordner vor, `create_summary()` erstellte die Zusammenfassung, `save_to_susipedia()` schrieb die Datei und rief `ingest.py` automatisch auf.
 
@@ -24,7 +24,11 @@ Das System war vollständig implementiert und lief produktiv. Es fühlte sich na
 
 **Warum verworfen — Die Redundanz-Falle:** Wenn SUSI eine Frage korrekt beantwortet würde eine reine Automatik diese Antwort erneut speichern. Das erzeugt massive Daten-Duplikate im Vektorraum. Doppelte Chunks für denselben Inhalt verzerren die Similarity Scores und zerstören die Retrieval-Präzision durch Kontext-Mixing — exakt das Problem das bei `simulate_top_n_hg.md` manuell entdeckt und behoben wurde.
 
-**Die entscheidende Erkenntnis:** Ein System das autonom in sein eigenes Gedächtnis schreibt braucht eine Fehlerrate von nahezu 0% um sicher zu sein. Kein 7B-Modell erreicht das.
+**Die entscheidende Erkenntnis:** Die Pipeline wurde im Mai 2026 deaktiviert. Die neue 3-Stufen-Architektur 
+(siehe unten) ist in Planung (Q3 2026). Der dafür vorgesehene Cross-Encoder 
+ist mit bge-reranker-v2-m3 (97% Korrektheit) bereits im Produktivbetrieb.
+
+→ *Reranker-Evolution: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
 
 ---
 
@@ -139,6 +143,7 @@ Die neue Architektur dreht das Verhältnis um: die KI ist ein hocheffizienter Se
 
 ---
 
-*→ Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
-*→ Weiter: [susi_06_grenzerfahrungen.md](susi_06_grenzerfahrungen.md)*  
+→ *Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
+→ *Weiter: [susi_06_grenzerfahrungen.md](susi_06_grenzerfahrungen.md)*  
+→ *Produktivbetrieb: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*  
 *Stand: Juni 2026 · Martin Freimuth*

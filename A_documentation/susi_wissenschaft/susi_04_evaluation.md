@@ -441,11 +441,7 @@ Die SUSIpedia-Überarbeitung war zum Zeitpunkt dieser Messung noch nicht abgesch
 
 Nach der vollständigen Überarbeitung aller SUSIpedia-Dateien nach den Formatierungsregeln (Fließtext, Topic-Label Ankersätze, Encoding-Fixes) werden drei gezielte Vergleichsläufe durchgeführt — in dieser Reihenfolge:
 
-**Lauf C — Retrieval Check *(zuerst, weil schnellster Lauf)*:**
-```
-retrieval_check.py | bge-m3 | chunk=1000 | k=5
-```
-Vorher: 70% Hit Rate gesamt, Projekte nur 30%. Läuft ohne LLM in wenigen Minuten. Zeigt sofort ob die SUSIpedia-Verbesserungen das Retrieval-Problem lösen — besonders ob GMM-Dateien nicht mehr bei CI/CD-Inhalten landen und ob persönliche Dateien besser differenziert werden.
+
 
 **Lauf A — Direkter Baseline-Vergleich *(voller Datensatz)*:**
 ```
@@ -453,7 +449,7 @@ bge-m3 | chunk=1000/o50 | k=5 | similarity | qwen2.5-coder:7b | temp=0.0 | promp
 ```
 Identische Config wie die beste Einzel-Kombination aus Lauf 8 (praezise_neu, qwen) — eine Config über alle 40 Testfragen = 40 Läufe. Vorher: 60% Korrektheit (praezise_neu in Lauf 8). Wie viel Verbesserung bringt die SUSIpedia-Qualität alleine ohne Parameteränderung?
 
-**Lauf B — Bestes bisheriges Ergebnis auf vollem Datensatz *(nur wenn Lauf A gut aussieht)*:**
+**Lauf B — Bestes bisheriges Ergebnis auf vollem Datensatz :**
 ```
 bge-m3 | chunk=1000/o50 | k=3 | similarity | qwen2.5-coder:7b | temp=0.0 | prompt=praezise_alt
 ```
@@ -461,22 +457,96 @@ Lauf 7 erreichte 98% — aber nur auf 61 Fragen. Jetzt auf dem vollen Datensatz 
 
 **Erwartung:** Signifikante Verbesserung vor allem in der Kategorie Projekte (von 30% Hit Rate auf 60%+) durch stärkere Topic-Label Ankersätze in GMM- und StockPredict-Dateien.
 
+**Lauf C — Retrieval Check *(zuerst, weil schnellster Lauf)*:**
+```
+retrieval_check.py | bge-m3 | chunk=1000 | k=5
+```
+Vorher: 70% Hit Rate gesamt, Projekte nur 30%. Läuft ohne LLM in wenigen Minuten. Zeigt sofort ob die SUSIpedia-Verbesserungen das Retrieval-Problem lösen — besonders ob GMM-Dateien nicht mehr bei CI/CD-Inhalten landen und ob persönliche Dateien besser differenziert werden.
+
+## Lauf C — Der letzte Grid-Lauf *(18.–20.06.2026)*
+
+Lauf C war als Retrieval Check geplant, wurde aber zum vollständigen Grid-Lauf 
+ausgebaut: 293 Fragen, 20 Parameterkombinationen, 5.860 Runs.
+
+```
+Config: bge-m3 | chunk=1000/o50 | k=3/5/7/9 | similarity + mmr | qwen2.5-coder:7b + llama3.1:8b | temp=0.0 | mit/ohne Reranker
+```
+
+**Gesamtergebnis:**
+
+| Konfiguration | Ø Score | Korrekt |
+|---|---|---|
+| k=3, ohne Reranker | 2.97 | 98% |
+| k=7, mit Reranker | 3.01 | 100% |
+| qwen2.5-coder:7b | 3.02 | 100% |
+| llama3.1:8b | 2.98 | 99% |
+| similarity | 3.01 | — |
+| mmr | 2.99 | — |
+
+**Nach Kategorie:**
+
+| Kategorie | Ø Score | Korrekt |
+|-----------|---------|---------|
+| projekte | 3.02 | 99% |
+| persoenlich | 3.00 | 99% |
+| lernen | 2.99 | 100% |
+| susi | 2.95 | 98% |
+
+**Kernerkenntnis:** Parameter-Unterschiede sind maximal 0.07 Punkte — statistisch 
+irrelevant. Der größte Hebel war Dokumentqualität (Hit Rate 36% → 91%), nicht 
+Modell-Tuning. Die Phase der Parameter-Optimierung ist abgeschlossen.
+
+Die `susi/`-Kategorie ist mit 98% die schwächste — hier besteht noch Potenzial 
+durch bessere Topic-Label Ankersätze in den SUSI-eigenen Dokumentationsdateien.
+
+→ *Details: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
+
+## Lauf D — Router + qwen3 *(geplant)*
+
+Nachdem Lauf C gezeigt hat, dass Parameter-Unterschiede minimal sind, verschiebt 
+sich der Fokus: Nicht mehr die beste Parameter-Kombination wird gesucht, sondern 
+die Qualität der neuen Produktiv-Komponenten wird gemessen.
+
+**Was getestet wird:**
+
+- **Router-Qualität:** Wählt der Retrieval-getriebene Router das richtige Profil? 
+  Validierung gegen manuelle Gold-Standard-Zuordnung pro Frage
+- **qwen3-Vergleich:** qwen2.5-coder:7b vs. qwen3:14b vs. qwen3.5:9b, 
+  jeweils 30–50 Fragen pro Kategorie
+- **Thinking Mode:** Auswirkung von thinking on/off auf Antwortqualität 
+  (qwen3-spezifisch)
+- **susi-Kategorie:** Gezielte Miss-Analyse der schwächsten Kategorie (98%)
+
+**Umfang:** Kein Grid-Lauf — 100–150 gezielte Fragen, 4–6 Konfigurationen. 
+Die Ergebnisse fließen direkt in die Router-Profile ein.
+
+**Neu gegenüber Lauf C:** Der Router ist aktive Komponente, nicht nur 
+Parameter-Vergleich. Query Rewriting ist aktiv. qwen3 bringt Thinking Mode 
+als neue Variable.
+
 ---
 
 ## Offene Fragen *(Stand Juni 2026)*
 
 Die bisherigen Läufe haben die Konfiguration deutlich verbessert — aber mehrere Fragen sind noch offen:
 
-**MMR vs. similarity:** Alle bisherigen Läufe nutzen `similarity`. MMR (Maximal Marginal Relevance) bestraft redundante Chunks und könnte bei thematisch überlappenden Dokumenten (z.B. den `martin/`-Dateien) besser abschneiden. Noch nicht getestet.
+**MMR vs. similarity:** In Lauf C getestet — MMR (Ø 2.99) minimal schlechter als similarity 
+(Ø 3.01). Die Unterschiede sind statistisch irrelevant. → siehe Kapitel 08.
 
-**Hybrid Search:** ChromaDB unterstützt kein natives BM25 + Vektorsuche. Die GMM-Misses deuten darauf hin dass Keyword-Suche hier helfen würde. Entscheidung: ChromaDB behalten mit manuellem BM25-Workaround, oder Wechsel zu Weaviate/Qdrant?
+**Hybrid Search:** Weiterhin offen. Die GMM-Misses deuten darauf hin dass Keyword-Suche 
+helfen würde. Entscheidung zurückgestellt bis Cross-Encoder-Effekt vollständig gemessen ist.
 
-**Cross-Encoder Reranker:** Ein Cross-Encoder (`cross-encoder/ms-marco-MiniLM-L-6-v2`) könnte die Chunk-Reihenfolge nach dem Retrieval verbessern — besonders für die Fälle wo der richtige Chunk bei Hit@3 oder Hit@4 landet statt bei Hit@1.
+**Cross-Encoder Reranker:** Gelöst durch bge-reranker-v2-m3 (97% Korrektheit). 
+Die Evolution über drei Modell-Generationen (ms-marco → amberoad → bge) ist in 
+Kapitel 08 dokumentiert.
 
-**Kategorie-spezifische Optimierung:** Lernen hat 100% Hit Rate, Projekte nur 30%. Eine einheitliche Konfiguration für alle Kategorien ist möglicherweise nicht optimal. Unterschiedliche Retrieval-Strategien pro Ordner wären ein nächster Schritt.
+**Kategorie-spezifische Optimierung:** Gelöst durch den Retrieval-getriebenen Router 
+(5 Profile, Reranker-gewichtetes Voting auf Chunk-Quellordner). 
+→ siehe Kapitel 02 und 08.
 
 ---
 
-*→ Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
-*→ Weiter: [susi_05_sackgassen.md](susi_05_sackgassen.md)*  
+→ *Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
+→ *Weiter: [susi_05_sackgassen.md](susi_05_sackgassen.md)*  
+→ *Produktivbetrieb: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*    
 *Stand: Juni 2026 · Martin Freimuth*

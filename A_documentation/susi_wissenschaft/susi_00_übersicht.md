@@ -3,7 +3,7 @@
 
 **Autor:** Martin Freimuth  
 **Zeitraum:** März 2026 – laufend  
-**Stack:** Python · Django · HTMX · LangChain · ChromaDB · Ollama  
+**Stack:** Python · Django · HTMX · LangChain · ChromaDB · Ollama · bge-reranker-v2-m3 
 **Repository:** github.com/Martin-Frei
 
 ---
@@ -41,9 +41,15 @@ SUSI folgt dem klassischen RAG-Prinzip (Retrieval-Augmented Generation) — aber
 ```
 Frage des Nutzers
        ↓
+Query Rewriting löst Ich-Form und Folgefragen auf
+       ↓
 Embedding-Modell wandelt Frage in Vektor um
        ↓
 ChromaDB sucht die ähnlichsten Wissens-Chunks
+       ↓
+Reranker sortiert die besten Chunks nach vorne
+       ↓
+Router wählt das optimale LLM-Profil pro Kategorie
        ↓
 Kontext + Frage + System-Prompt
        ↓
@@ -100,7 +106,10 @@ Im Verlauf der Entwicklung wurden vier Architekturansätze identifiziert und bew
 
 **Rein mathematische Filter:** Kosinus-Ähnlichkeit als einziger Qualitätsfilter erzeugt False Alarms und Silent Failures gleichzeitig.
 
-Die Lösung ist eine **3-stufige Architektur mit Human-in-the-Loop**: Kurzzeitgedächtnis → automatisierter Türsteher (Cross-Encoder) → asynchrones Review-Dashboard. Die KI schreibt Entwürfe vor, der Mensch behält die Datenhoheit.
+Die Lösung ist eine **3-stufige Architektur mit Human-in-the-Loop**: Kurzzeitgedächtnis 
+→ automatisierter Türsteher (Cross-Encoder) → asynchrones Review-Dashboard. Die KI schreibt 
+Entwürfe vor, der Mensch behält die Datenhoheit. Die alte Auto-Save-Pipeline wurde im Mai 2026 
+deaktiviert — die neue Architektur befindet sich in Planung (Q3 2026).
 
 → *Details: [susi_05_Sackgassen_und_neue_Architektur.md](susi_05_sackgassen.md)*
 
@@ -152,7 +161,23 @@ Die Architektur ist nicht nur für den persönlichen Einsatz gedacht. Lokale, DS
 
 ---
 
+
+## Produktivbetrieb (Juni 2026)
+
+Seit Abschluss der Evaluierungsphase ist SUSI in den Produktivbetrieb übergegangen. 
+Die wichtigsten Neuerungen:
+
+- **Router:** Retrieval-getriebenes Profil-System mit 5 Kategorien (susi, projekte, lernen, persoenlich, technik)
+- **Reranker:** bge-reranker-v2-m3 (97% Korrektheit) nach Evolution über drei Modell-Generationen
+- **Query Rewriting:** LLM-basiertes Umschreiben von Ich-Form und Folgefragen vor dem Retrieval
+- **Lauf C:** 5.860 Runs bestätigen — Parameter-Unterschiede sind minimal, Dokumentqualität ist der größte Hebel
+
+→ *Vollständige Dokumentation: [susi_08_Produktivbetrieb.md](susi_08_produktivbetrieb.md)*
+
+
+---
+
 *Stand: Juni 2026 — Dokument wird laufend aktualisiert*  
 *Martin Freimuth · github.com/Martin-Frei*  
-*Stack: Python · Django · HTMX · LangChain · ChromaDB · Ollama*
+*Stack: Python · Django · HTMX · LangChain · ChromaDB · Ollama · bge-reranker-v2-m3*
 

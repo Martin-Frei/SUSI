@@ -40,37 +40,60 @@ def ask_view(request):
     if not question:
         return HttpResponse("")
 
-    result = ask_susi(question)
+    # ── Chat-History für Query Rewriter aufbereiten ────────────────
+    # Aus der Session-History die letzten Q/A Paare extrahieren.
+    # Der Rewriter nutzt max. 2 Paare um Folgefragen aufzulösen.
+    # Beispiel: "the coast line you mention" → Rewriter sieht vorherige
+    # Antwort und kann den Bezug korrekt auflösen.
+    #
+    # Format für rewrite_query(): [{"question": str, "answer": str}, ...]
+    # Nur vollständige Paare (user + susi) werden übergeben.
+    session_history = request.session.get("history", [])
+    chat_history = []
+    i = 0
+    while i < len(session_history) - 1:
+        if session_history[i]["role"] == "user" and session_history[i+1]["role"] == "susi":
+            chat_history.append({
+                "question": session_history[i]["content"],
+                "answer":   session_history[i+1]["content"],
+            })
+            i += 2
+        else:
+            i += 1
+    # Nur die letzten 2 Paare — Rewriter soll nicht ausufern
+    chat_history = chat_history[-2:] if chat_history else None
+
+    result = ask_susi(question, chat_history=chat_history)
 
     # History in Session speichern (inkl. Metriken)
     history = request.session.get("history", [])
     history.append({
-        "role":             "user",
-        "content":          question,
+        "role":    "user",
+        "content": question,
     })
     history.append({
-        "role":             "susi",
-        "content":          result["answer"],
-        "tok_per_sec":      result["tok_per_sec"],
-        "antwortzeit_sek":  result["antwortzeit_sek"],
-        "tokens_generiert": result["tokens_generiert"],
-        "quelldateien":     result["quelldateien"],
-        "reranker_used":       result.get("reranker_used", False),
-        "chunks_gefunden":     result.get("chunks_gefunden", 0),
+        "role":                  "susi",
+        "content":               result["answer"],
+        "tok_per_sec":           result["tok_per_sec"],
+        "antwortzeit_sek":       result["antwortzeit_sek"],
+        "tokens_generiert":      result["tokens_generiert"],
+        "quelldateien":          result["quelldateien"],
+        "reranker_used":         result.get("reranker_used", False),
+        "chunks_gefunden":       result.get("chunks_gefunden", 0),
         "chunks_nach_reranking": result.get("chunks_nach_reranking", 0),
     })
     request.session["history"] = history
     request.session.modified = True
 
     return render(request, "core/partials/message_pair.html", {
-        "question":         question,
-        "answer":           result["answer"],
-        "tok_per_sec":      result["tok_per_sec"],
-        "antwortzeit_sek":  result["antwortzeit_sek"],
-        "tokens_generiert": result["tokens_generiert"],
-        "quelldateien":     result["quelldateien"],
-        "reranker_used":       result.get("reranker_used", False),
-        "chunks_gefunden":     result.get("chunks_gefunden", 0),
+        "question":              question,
+        "answer":                result["answer"],
+        "tok_per_sec":           result["tok_per_sec"],
+        "antwortzeit_sek":       result["antwortzeit_sek"],
+        "tokens_generiert":      result["tokens_generiert"],
+        "quelldateien":          result["quelldateien"],
+        "reranker_used":         result.get("reranker_used", False),
+        "chunks_gefunden":       result.get("chunks_gefunden", 0),
         "chunks_nach_reranking": result.get("chunks_nach_reranking", 0),
     })
 

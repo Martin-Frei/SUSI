@@ -71,7 +71,7 @@ Diese Disziplin macht SUSI reproduzierbar. Ein neuer Entwickler — oder Martin 
 
 Alle vier Motivationen münden in eine einzige Ausgangsfrage:
 
-> *"Wie baue ich einen KI-Assistenten der alles lokal verarbeitet, private Daten aktiv nutzbar macht, beim Aufbau täglich Wissen vermittelt — und so strukturiert entwickelt wird dass er in einem Jahr noch genauso funktioniert und verstanden wird?"*
+> *"Wie baue ich einen KI-Assistenten, der vier Dinge gleichzeitig leistet: alles lokal verarbeiten, private Daten aktiv nutzbar machen, beim Aufbau täglich Wissen vermitteln — und so strukturiert entwickelt sein, dass er in einem Jahr noch genauso funktioniert und verstanden wird?"*
 
 SUSI ist der Versuch einer Antwort darauf. Kein abgeschlossener — sondern ein laufender.
 

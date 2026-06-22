@@ -1,6 +1,11 @@
 # ── SUSI Produktions-Config ────────────────────────────────────────
 # Single Source of Truth für rag/query.py
-# Stand: 20.06.2026
+# Stand: 21.06.2026
+#
+# SPRACHE: Wird von query.py via LLM-Erkennung gesteuert (detect_language()).
+# System Prompts enthalten KEINE Sprach-Anweisungen mehr — diese kommen
+# dynamisch als "WICHTIG: Answer in the language with ISO code 'xx'."
+# direkt vor "Antwort:" im finalen Prompt.
 
 # ── Retrieval (Fallback wenn Router kein Profil wählt) ────────────
 retrieval:
@@ -23,13 +28,16 @@ generation:
   keep_alive: 0
   system_prompt: praezise_neu
 
-# ── Query Rewriting ───────────────────────────────────────────
+# ── Query Rewriting ───────────────────────────────────────────────
 query_rewriting:
   active: true
 
 # ── Router ────────────────────────────────────────────────────────
 router:
   active: true
+  # Fallback-Profil wenn alle Reranker-Scores <= 0.01
+  # Greift bei Fragen außerhalb der SUSIpedia (kein Signal aus Retrieval)
+  fallback_profile: persoenlich
   folder_profile_map:
     susi:       susi
     coding:     projekte
@@ -67,9 +75,11 @@ profiles:
 
   lernen:
     # Lernmaterial: analytisch, mehr Kontext
-    # llama peaked at k=7-9 in Lauf C — thinking: true für qwen3 vorbereitet
+    # llama peaked at k=7-9 in Lauf C
+    # thinking: false — llama3.1:8b unterstützt kein Thinking
+    # thinking: true reserviert für qwen3
     llm: llama3.1:8b
-    thinking: true
+    thinking: false
     top_k: 9
     top_n: 5
     algorithm: similarity
@@ -77,14 +87,16 @@ profiles:
     system_prompt: praezise_neu
 
   persoenlich:
-    # Persönlich/Job/Familie: präzise, nur aus Kontext
-    llm: qwen2.5-coder:7b
+    # Persönlich/Job/Familie: präzise, aus Kontext
+    # praezise_hybrid: erlaubt eigenes Wissen wenn Kontext leer/irrelevant
+    # Dient auch als Fallback-Profil bei unbekannten Themen (score <= 0.01)
+    llm: qwen2.5:7b  # ← test
     thinking: false
     top_k: 5
     top_n: 3
     algorithm: similarity
     temperature: 0.0
-    system_prompt: susi_standard
+    system_prompt: praezise_hybrid
 
   technik:
     # Hardware/Tools: faktisch
@@ -112,6 +124,8 @@ paths:
   docs: docs
 
 # ── System Prompts ────────────────────────────────────────────────
+# HINWEIS: Keine Sprach-Anweisungen in den Prompts — Sprache wird
+# dynamisch von query.py gesteuert via detect_language() + ISO-Code.
 system_prompts:
   praezise_neu: |
     Du bist ein praeziser KI-Assistent.
@@ -121,14 +135,14 @@ system_prompts:
     Sage NICHT einfach "nicht verfuegbar" wenn relevanter
     Kontext vorhanden ist.
     Keine Spekulationen aus eigenem Wissen.
-    Antworte in der Sprache in der du gefragt wirst, in vollstaendigen Saetzen.
+    Antworte in vollstaendigen Saetzen.
 
   praezise_alt: |
     Du bist ein praeziser KI-Assistent.
     Antworte AUSSCHLIESSLICH basierend auf dem gegebenen Kontext.
     Wenn die Antwort nicht im Kontext steht, sage: "Diese Information ist nicht verfuegbar."
     Keine Spekulationen. Keine Ergaenzungen aus eigenem Wissen.
-    Antworte in der Sprache in der du gefragt wirst, in vollstaendigen Saetzen.
+    Antworte in vollstaendigen Saetzen.
 
   praezise_hybrid: |
     Du bist ein praeziser technischer Assistent fuer die RAG-Bibliothek von Martin.
@@ -138,11 +152,11 @@ system_prompts:
     Gehe wie folgt vor:
     1. Suche die Antwort primaer im bereitgestellten KONTEXT.
     2. Wenn der KONTEXT die Antwort nicht enthaelt, nutze dein internes Expertenwissen.
-    3. Wenn du dein internes Wissen nutzt, beginne mit: "Basierend auf meinem allgemeinen Wissen..."
+    3. Wenn du dein internes Wissen nutzt, beginne mit: "Based on my general knowledge..."
     4. Wenn du den KONTEXT nutzt, antworte praezise und direkt.
     Sei bei technischen Daten aus dem KONTEXT strikt.
     Halluziniere nicht. Wenn du dir unsicher bist, sage das explizit.
-    Antworte in der Sprache in der du gefragt wirst, in vollstaendigen Saetzen.
+    Antworte in vollstaendigen Saetzen.
 
   praezise_Chain_of_Thought: |
     Du bist ein praeziser technischer Assistent fuer die RAG Bibliothek von Martin.
@@ -153,7 +167,6 @@ system_prompts:
     Informationen aus dem Kontext und markiere diese explizit als [INDIREKT/UNSICHER].
     Antworte in vollstaendigen Saetzen.
     Bleibe strikt beim Kontext, keine Ergaenzungen aus eigenem Wissen.
-    Antworte in der Sprache in der du gefragt wirst.
 
   susi_standard: |
     Du bist SUSI, Martins persoenliche KI-Assistentin.
@@ -162,4 +175,4 @@ system_prompts:
     Bei persoenlichen Fragen: NUR Kontext, nie erfinden.
     Bei allgemeinen Fragen: eigenes Wissen erlaubt.
     Wenn nicht im Kontext: "Dazu fehlt mir noch was in der SUSIpedia!"
-    Antworte in der Sprache in der du gefragt wirst, in vollstaendigen Saetzen.
+    Antworte in vollstaendigen Saetzen.

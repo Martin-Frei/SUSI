@@ -9,7 +9,8 @@ from pathlib import Path
 
 # ── Profil-Auswahl via Reranker-Voting ────────────────────────────
 
-def get_profile(ranked_docs: list, folder_profile_map: dict, profiles: dict) -> tuple[str, dict]:
+def get_profile(ranked_docs: list, folder_profile_map: dict, profiles: dict,
+               fallback_profile: str = "persoenlich") -> tuple[str, dict]:
     """
     Analysiert die Top-Chunks nach dem Reranking und wählt ein Profil.
 
@@ -17,9 +18,16 @@ def get_profile(ranked_docs: list, folder_profile_map: dict, profiles: dict) -> 
         ranked_docs:        Liste von (score: float, doc: Document) — bereits rerankt, absteigende Reihenfolge
         folder_profile_map: dict aus susi_config.yaml → router.folder_profile_map
         profiles:           dict aus susi_config.yaml → profiles
+        fallback_profile:   Profil-Name wenn alle Scores unter Threshold (aus susi_config.yaml)
 
     Returns:
         (profil_name: str, profil_config: dict)
+
+    Edge-Cases:
+        - Keine Chunks: erstes Profil in profiles wird genutzt
+        - Alle Scores <= 0.01: fallback_profile greift (kein Signal aus Retrieval)
+          Das passiert wenn ChromaDB zwar Chunks findet, der Reranker aber alle
+          als irrelevant einstuft — z.B. bei Fragen außerhalb der SUSIpedia.
     """
     profil_gewichte: dict[str, float] = {}
 
@@ -29,7 +37,16 @@ def get_profile(ranked_docs: list, folder_profile_map: dict, profiles: dict) -> 
         profil_gewichte[profil] = profil_gewichte.get(profil, 0.0) + float(score)
 
     if not profil_gewichte:
-        fallback = next(iter(profiles))
+        fallback = fallback_profile if fallback_profile in profiles else next(iter(profiles))
+        print(f"  ⚠️  Keine Chunks — Fallback: {fallback}")
+        return fallback, profiles[fallback]
+
+    # Edge-Case: alle Scores nahe 0 → kein Signal → Fallback
+    # Verhindert zufällige Profil-Auswahl bei irrelevanten Chunks
+    max_score = max(profil_gewichte.values())
+    if max_score <= 0.01:
+        fallback = fallback_profile if fallback_profile in profiles else next(iter(profiles))
+        print(f"  ⚠️  Alle Scores <= 0.01 — kein Signal — Fallback: {fallback}")
         return fallback, profiles[fallback]
 
     gewinner = max(profil_gewichte, key=lambda p: profil_gewichte[p])

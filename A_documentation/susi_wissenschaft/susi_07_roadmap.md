@@ -17,12 +17,23 @@ Die Erkenntnisse aus der Evaluierung und dem externen Review zeigen mehrere offe
 
 ### SUSIpedia-Qualität vollständig abschließen
 
-Stand 10.06.2026: ca. 85% der 124 Dateien überarbeitet, Retrieval Hit Rate bereits auf 91%. Die verbleibenden ~15% werden heute abgeschlossen — die erwartete Hit Rate danach liegt nahe 100%. Das Ergebnis wird durch Lauf A direkt gemessen: eine Config über alle 40 Testfragen, identisch zu Lauf 8, um den sauberen Vorher-Nachher-Vergleich zu haben.     
-11.02.2026 alle Dokumente fertig 
+Stand 10.06.2026: ca. 85% der 124 Dateien überarbeitet, Retrieval Hit Rate bereits auf 91%. Die verbleibenden ~15% werden heute abgeschlossen — die erwartete Hit Rate danach liegt nahe 100%. Das Ergebnis wird durch Lauf A direkt gemessen: eine Config über alle 40 Testfragen, identisch zu Lauf 8, um den sauberen Vorher-Nachher-Vergleich zu haben.    
+
+✅ **Abgeschlossen (Juni 2026).** Alle 124 Dateien überarbeitet, 617 Chunks in ChromaDB. 
+Retrieval Hit Rate von 36% auf 91% gesteigert. Lauf C bestätigt: Dokumentqualität 
+war der größte Hebel.
+
+→ *Details: [susi_04_evaluation.md](susi_04_evaluation.md), [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
 
 ### MMR vs. Similarity evaluieren
 
 Vor dem Cross-Encoder-Reranker wird MMR getestet — hier gibt es bereits Daten aus den Grid-Läufen zum direkten Vergleich mit Similarity Search. Das ist der schnellste nächste Schritt mit dem geringsten Implementierungsaufwand.
+
+✅ **MMR vs. Similarity — abgeschlossen (Lauf C, Juni 2026).** MMR (Ø 2.99) minimal 
+schlechter als similarity (Ø 3.01). Unterschied statistisch irrelevant. 
+Similarity bleibt Standard.
+
+→ *Details: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
 
 ### Cross-Encoder Reranker implementieren
 
@@ -30,19 +41,57 @@ Der Retrieval Check vom 10.06.2026 zeigt dass Hit@1 bei 52.5% liegt aber Hit@5 b
 
 Wichtig: das gewählte Modell muss deutsch-kompatibel sein. Kandidat ist `amberoad/bert-multilingual-passage-reranking-msmarco`. Vor dem Einsatz wird ein Sprachkompatibilitäts-Test durchgeführt.
 
+✅ **Cross-Encoder Reranker — abgeschlossen (Juni 2026).** Nach Evaluation über drei 
+Modell-Generationen (ms-marco → amberoad/59% → bge-reranker-v2-m3/97%) ist 
+bge-reranker-v2-m3 produktiv. Läuft auf CPU, kein VRAM-Verbrauch.
+
+→ *Details: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
+
 ### Metriken-Konsistenz im Evaluator absichern
 
-Der Skalenfehler aus den frühen Läufen darf sich nicht wiederholen. `MAX_SCORE = 5` und `KORREKT_THRESHOLD = 2` werden als explizite Konstanten in `evaluator.py` verankert. Jede CSV-Ausgabe enthält diese Werte als Metadaten-Spalten.
+❌ Metriken-Konsistenz im Evaluator absichern *(in Arbeit)*
+Der Skalenfehler aus den frühen Läufen darf sich nicht wiederholen. `MAX_SCORE` und 
+`KORREKT_THRESHOLD` werden als explizite Konstanten in `evaluator.py` verankert. 
+Jede CSV-Ausgabe enthält diese Werte als Metadaten-Spalten. Zusätzlich: 
+Nachbewertungs-Skala (`--nachbewertung`) mit dem System vereinheitlichen (0–3).
 
 ### Asynchronen Worker für Modellwechsel
 
 **`!save`-Befehl implementieren:** Der explizite Speicher-Trigger existiert noch nicht. Die aktuelle Auto-Save-Pipeline speichert automatisch — das Gegenteil des gewünschten Verhaltens. `!save` als Frontend-Befehl implementieren, einen asynchronen Django-Task (Django-Q oder Celery) anschließen, und HTMX Polling für Statusmeldungen ("Lade Modell...", "Erstelle Zusammenfassung...", "Bereit für Review") einbauen. Der Nutzer wird nicht allein gelassen.
 
+
+❌ Asynchronen Worker für Modellwechsel *(geplant Q3 2026)*
+Der `!save`-Befehl ist noch nicht implementiert. Die Planung steht (Kapitel 05 + 06): 
+asynchroner Django-Task, `OLLAMA_MAX_LOADED_MODELS=1`, HTMX Polling für Status-Feedback. 
+Wird selten ausgelöst (2–3 Mal pro Tag) — kein permanenter Worker nötig.
+
+
+### Zusätzliche Meilensteine — bereits erledigt (Juni 2026)
+
+✅ **Router implementiert (20.06.2026).** Retrieval-getriebenes Profil-System mit 
+5 Kategorien (susi, projekte, lernen, persoenlich, technik). Reranker-gewichtetes 
+Voting auf Chunk-Quellordner. Kein Extra-LLM-Call.
+
+✅ **Query Rewriting aktiv (20.06.2026).** Löst Ich-Form-Problem und Folgefragen 
+vor dem Retrieval auf. Generisch gehalten für spätere PDF-RAG-Nutzung.
+
+✅ **Fallback-Profil (21.06.2026).** Bei Fragen außerhalb der SUSIpedia greift 
+`praezise_hybrid` — erst Kontext prüfen, dann eigenes LLM-Wissen.
+
+✅ **Chat-History im Rewriter (21.06.2026).** Letzte 2 Q/A-Paare werden an den 
+Rewriter übergeben. Antworten auf 200 Zeichen gekürzt.
+
+✅ **Frontend: SUSI-Icon + lokale Fonts (20.06.2026).** GDPR-konform, kein 
+externer Request.
+
+→ *Details zu allen Punkten: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
 ---
 
 ## Phase 2 — 3-stufiges Speichermodell implementieren *(Q4 2026)*
 
-Das Konzept des Human-in-the-Loop Speichermodells ist ausgearbeitet (vgl. Kapitel 05). Die Implementierung folgt in dieser Reihenfolge:
+Das Konzept des Human-in-the-Loop Speichermodells ist ausgearbeitet (vgl. Kapitel 05). 
+Die technischen Voraussetzungen sind mit bge-reranker-v2-m3 (97% Korrektheit) und dem 
+produktiven Router gegeben. Die Implementierung folgt in dieser Reihenfolge:
 
 **Stufe 1 — SQLite Kurzzeitgedächtnis:** Der Chatverlauf wird persistent in einer lokalen SQLite-Tabelle gehalten. Kein Datenverlust bei Ollama-Crashes. Trigger: einzig der explizite `!save`-Befehl.
 
@@ -60,6 +109,12 @@ Mehrere offene Fragen aus der Evaluierung deuten auf strukturelle Grenzen der ak
 
 **Reihenfolge innerhalb Phase 3:** Kategorie-spezifische Konfiguration, dann Hybrid Search — nur wenn die anderen Maßnahmen das Projekte-Problem nicht vollständig lösen.
 
+### PDF-RAG *(geplant)*
+
+Beliebige PDFs als temporären ChromaDB-Index einlesen und gezielt befragen. 
+Query Rewriting ist bereits generisch gehalten (kein Overfitting auf Martin). 
+Benötigt: separater Index pro Dokument, Session-Kontext für Folgefragen.
+
 ### Hybrid Search
 
 Die GMM-Retrieval-Misses entstehen weil "Pipeline", "Deploy" und "Run" als allgemeine DevOps-Begriffe keinen starken semantischen Vektor erzeugen. Keyword-basierte BM25-Suche würde hier helfen. ChromaDB unterstützt kein natives Hybrid Search — die Entscheidung lautet: BM25-Workaround mit eigenem Preprocessing, oder Migration zu Weaviate bzw. Qdrant. Diese Entscheidung wird erst getroffen wenn Cross-Encoder und kategorie-spezifische Configs ihren vollen Effekt gezeigt haben.
@@ -68,6 +123,13 @@ Die GMM-Retrieval-Misses entstehen weil "Pipeline", "Deploy" und "Run" als allge
 
 Lernen hat 100% Hit Rate, Projekte 30% — eine einheitliche Konfiguration für beide ist möglicherweise nicht optimal. Unterschiedliche `top_k`-Werte oder Retrieval-Strategien pro Ordner-Kategorie wären ein natürlicher nächster Schritt. Das setzt eine stabilere Gesamt-Hit-Rate als Basis voraus.
 
+✅ **Kategorie-spezifische Konfiguration — gelöst durch Router (Juni 2026).** 
+Der Retrieval-getriebene Router weist jeder Kategorie ein eigenes Profil mit 
+spezifischen top_k-, top_n- und Temperature-Werten zu. Lernen nutzt llama3.1:8b 
+mit top_k=9, Projekte nutzen qwen2.5-coder:7b mit top_k=7. Keine manuelle 
+Konfiguration nötig — die SUSIpedia-Ordnerstruktur steuert die Zuordnung automatisch.
+
+→ *Details: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
 ---
 
 ## Phase 4 — Edge Deployment und physische Integration *(langfristig)*
@@ -110,5 +172,6 @@ Die in Kapitel 06 dokumentierten Grenzerfahrungen bleiben bestehen und werden du
 
 ---
 
-*→ Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
+→ *Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
+→ *Produktivbetrieb: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*   
 *Stand: Juni 2026 · Martin Freimuth*

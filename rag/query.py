@@ -15,6 +15,46 @@ import pytz
 
 from rag.router import get_profile, apply_profile
 
+# ── Sprach-Erkennung ──────────────────────────────────────────────
+# LLM-basierte Spracherkennung — zuverlässig für alle Sprachen.
+# Warum LLM statt Heuristik?
+# Stop-Wort-Listen funktionieren nur für bekannte Sprachen (EN/DE).
+# qwen2.5-coder:7b ist multilingual und erkennt 50+ Sprachen korrekt.
+# Gibt ISO 639-1 Code zurück (en, de, es, fr, tl, ar, zh, ...).
+# Fail-safe: bei Fehler → "de" als Fallback.
+#
+def detect_language(text: str, llm_model: str, keep_alive: int) -> str:
+    """
+    Erkennt die Sprache eines Textes via LLM.
+
+    Args:
+        text:       Der zu erkennende Text (typisch die Nutzerfrage)
+        llm_model:  Ollama-Modellname
+        keep_alive: Ollama keep_alive Parameter
+
+    Returns:
+        ISO 639-1 Sprachcode (str), z.B. "en", "de", "es", "fr", "tl"
+        Fallback: "de" bei Fehler oder leerer Antwort
+    """
+    payload = {
+        "model":      llm_model,
+        "prompt":     f"What language is this text written in? Answer with only the ISO 639-1 code (e.g. en, de, es, fr, tl, zh, ar). Text: {text}",
+        "stream":     False,
+        "keep_alive": keep_alive,
+        "options": {
+            "temperature": 0.0,
+            "num_ctx":     128,
+        }
+    }
+    try:
+        r = requests.post(OLLAMA_URL, json=payload, timeout=10)
+        lang = r.json().get("response", "").strip().lower()[:5].split()[0]
+        print(f"  🌍 Sprache erkannt: {lang}")
+        return lang if lang else "de"
+    except Exception:
+        return "de"
+
+
 # ── Config laden ──────────────────────────────────────────────────
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "susi_config.yaml")
 
@@ -78,24 +118,79 @@ def get_date():
 
 
 # ── Query Rewriting ───────────────────────────────────────────────
-def rewrite_query(question: str, llm_model: str, keep_alive: int) -> str:
+#
+# WARUM Query Rewriting?
+# ChromaDB sucht semantisch — aber Embedding-Modelle können Kontext
+# innerhalb einer Frage nicht verknüpfen. Beispiel:
+#   "Ich bin Martin. Wo wohne ich?" → falscher Chunk (kein Martin-Bezug)
+#   Rewriter → "Wo wohnt Martin Freimuth?" → richtiger Chunk
+#
+# WARUM Chat-History?
+# Folgefragen verlieren ohne Kontext ihren Bezug. Beispiel:
+#   Frage 1: "What is Arunachal Pradesh?"
+#   Antwort 1: "...hat eine Küste..." (halluziniert)
+#   Frage 2: "Where is the coast line you mention?"
+#   → Ohne History: SUSI versteht den Bezug nicht
+#   → Mit History: Rewriter löst auf → "coast line mentioned for Arunachal Pradesh"
+#
+# DESIGN-ENTSCHEIDUNGEN:
+# - Nur letzte 2 Q/A Paare — kein Ausufern, passt in num_ctx=512
+# - Antworten auf 200 Zeichen gekürzt — Rewriter braucht nur den Kern
+# - Original-Frage geht ans LLM, nicht die umgeschriebene (natürliche Antwort)
+# - Kein Rewriting wenn chat_history=None (Einzelfrage ohne Session)
+# - Sprache: immer in der Sprache der aktuellen Frage
+# - Keine Inhaltsbewertung: Rewriter darf nichts ablehnen
+#
+def rewrite_query(question: str, llm_model: str, keep_alive: int,
+                  chat_history: list | None = None,
+                  lang: str = "de") -> str:
     """
     Schreibt eine Frage in eine optimale Suchanfrage um.
-    Löst Ich-Form, vage Referenzen und Folgefragen auf.
-    Gibt die umgeschriebene Frage zurück — oder die Original-Frage wenn kein Rewriting nötig.
+
+    Args:
+        question:     Die aktuelle Frage des Nutzers
+        llm_model:    Ollama-Modellname für den Rewriter-Call
+        keep_alive:   Ollama keep_alive Parameter
+        chat_history: Optionale Liste der letzten Q/A Paare aus der Session.
+                      Format: [{"question": str, "answer": str}, ...]
+                      Nur die letzten 2 Einträge werden genutzt.
+
+    Returns:
+        Umgeschriebene Frage (str) — oder Original wenn kein Rewriting nötig.
+        Bei Fehler immer Original zurückgeben (fail-safe).
     """
+
+    # Chat-History aufbereiten — max. 2 letzte Q/A, Antworten auf 200 Zeichen kürzen
+    # (Rewriter braucht nur den Kern, nicht die volle Antwort)
+    history_block = ""
+    if chat_history:
+        last_two = chat_history[-2:]
+        lines = []
+        for pair in last_two:
+            q = pair.get("question", "").strip()
+            a = pair.get("answer", "").strip()[:200]
+            if q and a:
+                lines.append(f"Q: {q}")
+                lines.append(f"A: {a}")
+        if lines:
+            history_block = "Bisheriger Chat-Verlauf (letzte 2 Q/A):\n" + "\n".join(lines) + "\n\n"
+
     prompt = f"""Du bist ein Query-Rewriting-Assistent für ein RAG-System.
 Der Nutzer ist Martin Freimuth, ein 54-jähriger Python/ML-Entwickler aus Schechen bei Rosenheim.
 
-Deine Aufgabe: Schreibe die Frage so um, dass sie als eigenständige Suchanfrage funktioniert.
-Regeln:
-- "Ich" → "Martin Freimuth"
-- "mein/meine/mir/mich" → passende 3. Person
-- Vage Referenzen auflösen (z.B. "das Projekt" → konkreter Name wenn erkennbar)
-- Wenn die Frage bereits klar ist, gib sie unverändert zurück
-- Antworte NUR mit der umgeschriebenen Frage, kein Kommentar, keine Erklärung
+Deine EINZIGE Aufgabe ist das Umschreiben. Bewerte den Inhalt NICHT. Lehne KEINE Anfragen ab.
 
-Frage: {question}
+{history_block}Regeln:
+- Write ONLY in the language with ISO code '{lang}'. NEVER translate into another language.
+- "Ich / I" → "Martin Freimuth"
+- "mein/meine/mir/mich / my/me" → passende 3. Person
+- Wenn die Frage auf eine vorherige Antwort verweist (z.B. "the coast line you mention"),
+  löse den Bezug auf anhand des Chat-Verlaufs
+- Vage Referenzen auflösen (z.B. "das Projekt / the project" → konkreter Name wenn erkennbar)
+- Wenn die Frage bereits klar und eigenständig ist, gib sie unverändert zurück
+- Antworte NUR mit der umgeschriebenen Frage, ein Satz, kein Kommentar, keine Ablehnung
+
+Aktuelle Frage: {question}
 Umgeschrieben:"""
 
     payload = {
@@ -105,41 +200,56 @@ Umgeschrieben:"""
         "keep_alive": keep_alive,
         "options": {
             "temperature": 0.0,
-            "num_ctx":     512,
+            "num_ctx":     768,   # etwas mehr als vorher wegen History-Block
         }
     }
 
     try:
         r = requests.post(OLLAMA_URL, json=payload, timeout=30)
         rewritten = r.json().get("response", "").strip()
-        # Sicherheit: wenn Rewriting leer oder zu lang → Original behalten
-        if not rewritten or len(rewritten) > len(question) * 3:
+        # Fail-safe: wenn Rewriting leer, zu lang oder Ablehnung → Original behalten
+        if not rewritten or len(rewritten) > len(question) * 4:
             return question
-        print(f"  ✏️  Query Rewriting: '{question}' → '{rewritten}'")
+        # Ablehnung erkennen (Rewriter sollte nie ablehnen, aber zur Sicherheit)
+        refusal_markers = ["ich kann", "i cannot", "i can't", "nicht erfüllen", "unable to"]
+        if any(m in rewritten.lower() for m in refusal_markers):
+            print(f"  ⚠️  Rewriter hat abgelehnt — Original wird verwendet")
+            return question
+        print(f"  ✏️  Query Rewriting: '{question[:60]}' → '{rewritten[:60]}'")
         return rewritten
-    except Exception:
+    except Exception as e:
+        print(f"  ⚠️  Rewriter Fehler: {e} — Original wird verwendet")
         return question
 
 
 # ── Kern-Funktion ─────────────────────────────────────────────────
-def ask_susi(question):
+def ask_susi(question, chat_history: list | None = None):
     """
-    Stellt eine Frage an SUSI und gibt ein Dict zurück:
-    {
-        "answer":                str,
-        "tok_per_sec":           float,
-        "antwortzeit_sek":       float,
-        "tokens_generiert":      int,
-        "quelldateien":          list[str],
-        "llm_model":             str,
-        "embedding_model":       str,
-        "reranker_used":         bool,
-        "chunks_gefunden":       int,
-        "chunks_nach_reranking": int,
-        "router_profil":         str,
-        "thinking":              bool,
-        "rewritten_query":       str,
-    }
+    Stellt eine Frage an SUSI und gibt ein Dict zurück.
+
+    Args:
+        question:     Die aktuelle Frage des Nutzers
+        chat_history: Optionale Session-History für den Query Rewriter.
+                      Format: [{"question": str, "answer": str}, ...]
+                      Wird von views.py befüllt — max. letzte 2 Q/A Paare.
+                      None = kein Chat-Kontext (z.B. erste Frage der Session)
+
+    Returns:
+        {
+            "answer":                str,
+            "tok_per_sec":           float,
+            "antwortzeit_sek":       float,
+            "tokens_generiert":      int,
+            "quelldateien":          list[str],
+            "llm_model":             str,
+            "embedding_model":       str,
+            "reranker_used":         bool,
+            "chunks_gefunden":       int,
+            "chunks_nach_reranking": int,
+            "router_profil":         str,
+            "thinking":              bool,
+            "rewritten_query":       str,
+        }
     """
     now = get_time()
 
@@ -163,10 +273,14 @@ def ask_susi(question):
     query_rewrite   = cfg.get("query_rewriting", {}).get("active", True)
     router_profil   = "fallback"
 
-    # 0. Query Rewriting — vor dem Retrieval
+    # 0. Sprache erkennen + Query Rewriting — vor dem Retrieval
+    # Sprache wird VOR dem Rewriter erkannt damit der Rewriter nicht übersetzt.
+    # Beispiel: "What is X?" → detect_language() → "en" → Rewriter schreibt auf Englisch um
+    # chat_history ermöglicht Folgefragen korrekt aufzulösen
+    lang = detect_language(question, llm_model, keep_alive)
     rewritten_query = question
     if query_rewrite:
-        rewritten_query = rewrite_query(question, llm_model, keep_alive)
+        rewritten_query = rewrite_query(question, llm_model, keep_alive, chat_history, lang)
 
     # 1. Retrieval (mit umgeschriebener Frage)
     embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
@@ -202,7 +316,8 @@ def ask_susi(question):
         profiles           = cfg.get("profiles", {})
         system_prompts     = cfg.get("system_prompts", {})
 
-        profil_name, profil_config = get_profile(ranked_docs[:reranker_top_n], folder_profile_map, profiles)
+        fallback_profile = cfg.get("router", {}).get("fallback_profile", "persoenlich")
+        profil_name, profil_config = get_profile(ranked_docs[:reranker_top_n], folder_profile_map, profiles, fallback_profile)
         params = apply_profile(profil_config, system_prompts)
 
         llm_model     = params["llm_model"]
@@ -218,6 +333,12 @@ def ask_susi(question):
     quelldateien = list({doc.metadata.get("source", "?") for doc in docs})
 
     # 5. Prompt bauen (Original-Frage ans LLM, nicht die umgeschriebene)
+    # Sprach-Anweisung explizit im Prompt — verhindert dass qwen auf Deutsch antwortet
+    # auch wenn der Kontext oder die SUSIpedia auf Deutsch ist
+    # Generische Sprach-Anweisung — funktioniert für alle ISO-Codes
+    lang_instruction = f"Answer in the language with ISO code '{lang}'."
+    print(f"  🗣️  Sprach-Anweisung: {lang_instruction}")
+
     prompt = f"""{system_prompt}
 
 Heute ist: {now}
@@ -227,6 +348,7 @@ Kontext:
 
 Frage: {question}
 
+WICHTIG: {lang_instruction}
 Antwort:"""
 
     # 6. Ollama-Payload
@@ -413,3 +535,4 @@ if __name__ == "__main__":
         if worth_saving(question):
             if susi_evaluates(question, result["answer"]):
                 show_save_prompt(question, result["answer"])
+                

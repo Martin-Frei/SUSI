@@ -31,6 +31,14 @@ Dieser Bericht ist kein Portfolio-Stück das nur Erfolge dokumentiert. Grenzerfa
 
 **Die Lösung:** Für deutschsprachige SUSIpedia-Inhalte ist ein mehrsprachiges oder deutsch-optimiertes Modell erforderlich. Kandidaten: `Sahajpreet/german-deberta-v3-base-xnli` oder `amberoad/bert-multilingual-passage-reranking-msmarco`. Vor der Implementierung wird ein Smoke-Test mit bekannten deutschen Halluzinations-Beispielen durchgeführt um die tatsächliche Detection-Rate zu messen.
 
+**Update Juni 2026:** amberoad wurde getestet und mit 59% Korrektheit disqualifiziert — 
+der Reranker warf aktiv gute Chunks weg. Die produktive Lösung ist 
+`BAAI/bge-reranker-v2-m3` (97% Korrektheit), vom selben Team wie das Embedding-Modell 
+bge-m3. Die vollständige Reranker-Evolution (ms-marco → amberoad → bge) ist in 
+Kapitel 08 dokumentiert.
+
+→ *Reranker-Evolution: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
+
 **Die Lektion:** Sprachkompatibilität ist eine funktionale Anforderung. Bei jedem NLP-Modell das in SUSI eingesetzt wird muss explizit geprüft werden: auf welcher Sprache wurde trainiert, und welche Sprache verarbeitet SUSI?
 
 ---
@@ -67,12 +75,14 @@ Alle vier Punkte teilen ein Muster: eine Entscheidung, die auf einem gültigen P
 
 Das externe Review hat diese blinden Flecken sichtbar gemacht. Das ist der Wert eines zweiten Augenpaars — nicht weil die eigene Analyse falsch war, sondern weil Implizites explizit wird.
 
-**Status der Auto-Save-Pipeline (Stand Juni 2026):** Der Code ist noch aktiv in `query.py` — er wurde nicht entfernt weil das Prinzip "kein Abriss ohne Ersatz" gilt. Die 3-Stufen-Architektur befindet sich in der durch Grenzerfahrung 2 und 3 informierten Planungsphase. Sobald der asynchrone Background-Task und der mehrsprachige NLI-Türsteher implementiert sind wird die alte Pipeline deaktiviert. Bis dahin läuft die alte Auto-Save-Pipeline noch aktiv — sie wird bewusst selten und nur bei eindeutig korrekten Antworten ausgelöst.
-
-*→ Implementierungsplan: [susi_07_roadmap.md — Phase 2](susi_07_roadmap.md)*
+**Status der Auto-Save-Pipeline (Stand Juni 2026):** Der Code ist noch in `query.py` 
+enthalten, aber die Pipeline wurde im Mai 2026 deaktiviert. Der Code bleibt nach dem 
+Prinzip "kein Abriss ohne Ersatz" erhalten — die 3-Stufen-Architektur befindet sich in der 
+durch Grenzerfahrung 2 und 3 informierten Planungsphase (Q3 2026).
 
 ---
 
-*→ Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
-*→ Weiter: [susi_07_roadmap.md](susi_07_roadmap.md)*  
+→ *Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
+→ *Weiter: [susi_07_roadmap.md](susi_07_roadmap.md)*  
+→ *Produktivbetrieb: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*  
 *Stand: Juni 2026 · Martin Freimuth*

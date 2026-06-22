@@ -10,13 +10,19 @@ SUSI folgt dem RAG-Prinzip (Retrieval-Augmented Generation). Das Grundprinzip ha
 ```
 Frage des Nutzers
        ↓
-Embedding-Modell wandelt Frage in Vektor um  [lokal]
+Query Rewriting löst Ich-Form und Folgefragen auf   [lokal, LLM]
        ↓
-ChromaDB sucht die ähnlichsten Wissens-Chunks [lokal]
+Embedding-Modell wandelt Frage in Vektor um         [lokal]
        ↓
-Kontext + Frage + System-Prompt
+ChromaDB sucht die ähnlichsten Wissens-Chunks       [lokal]
        ↓
-LLM generiert die Antwort                    [lokal]
+Reranker (bge-reranker-v2-m3) sortiert Top 3        [lokal, CPU]
+       ↓
+Router: Reranker-gewichtetes Voting → Profil         [lokal]
+       ↓
+Kontext + Original-Frage + System-Prompt
+       ↓
+LLM generiert die Antwort                           [lokal]
        ↓
 Antwort an den Nutzer
 ```
@@ -46,6 +52,12 @@ Ollama läuft als lokaler Inferenz-Server auf Port 11434 und macht den Modellwec
 ### LangChain als Framework
 
 LangChain verbindet Embedding-Modell, ChromaDB und LLM mit minimalem Boilerplate. Der Trade-off ist eine Abhängigkeit von einem Framework das sich schnell weiterentwickelt — bisher kein Problem, aber ein bekanntes Risiko.
+
+### susi_config.yaml — Single Source of Truth
+
+Es werden alle Parameter zentral in `rag/susi_config.yaml` verwaltet.
+Ingest, Query und Views lesen alle aus dieser Config — keine hardcodierten Werte mehr.
+Modellwechsel, Chunk-Größen oder Prompt-Änderungen sind ein Edit in einer Datei.
 
 ---
 
@@ -145,23 +157,72 @@ VORGEHEN:
 Der Prompt hat sich mehrfach verändert. Eine auskommentierte strengere Variante in `query.py` zeigt einen verworfenen Ansatz: absolute Kontextbindung ohne Fallback auf Modellwissen. In der Praxis führte das zu zu vielen "Dazu habe ich nichts" Antworten auch bei Fragen die das Modell aus eigenem Wissen beantworten könnte.
 
 ---
+## Neue Pipeline-Stufen *(Produktivbetrieb Juni 2026)*
 
-## Was verworfen wurde
+### Query Rewriting
 
-### Auto-Save Pipeline *(als Problem erkannt Mai 2026 — Ablösung in Arbeit)*
+Embedding-Modelle können keine Coreference auflösen — „Ich bin Martin. Wo wohne ich?"
+findet nicht den richtigen Chunk, weil „ich" und „Martin" im Vektorraum nicht verknüpft sind.
 
-`query.py` enthält noch die vollständige Auto-Save Pipeline im aktiven Zustand:
+Die Lösung: Ein LLM-Call schreibt die Frage vor dem Retrieval um:   
+"Ich bin Martin. Wo wohne ich?" → "Martin Freimuth wo wohne ich?"
+
+
+
+ChromaDB sucht mit der umgeschriebenen Frage. Ans Antwort-LLM geht die Original-Frage
+für eine natürliche Antwort. Ergänzt wird das durch `ich_bin_martin.md` — zwei Chunks
+mit Selbstreferenz-Sätzen in der SUSIpedia. Der Rewriter ist generisch gehalten und
+kann über `query_rewriting.active` in der Config deaktiviert werden.
+
+### Reranker — bge-reranker-v2-m3
+
+Nach dem Retrieval bewertet ein Cross-Encoder-Modell die Chunks neu und gibt die besten
+top_n=3 ans LLM weiter. Läuft auf CPU, verbraucht kein VRAM.
+
+Die Modell-Wahl war eine Evolution: ms-marco (English-only) → amberoad (59%, aktiv schädlich)
+→ bge-reranker-v2-m3 (97%). Erkenntnis: Ein schlechter Reranker ist schlimmer als gar keiner.
+
+### Router — Retrieval-getriebenes Profil-System
+
+Statt eines fixen Parameter-Satzes wählt ein Router das optimale Profil basierend auf
+der SUSIpedia-Struktur:
+
+Frage rein    
+→ Retrieval     
+→ Reranker sortiert Top 3    
+→ Router: woher kommen die Chunks? (Ordnerpfad)   
+→ Reranker-gewichtetes Voting    
+→ Profil gewinnt
+
+
+Fünf Profile: susi, projekte, lernen, persoenlich, technik    
+→ jedes mit eigenem LLM, top_k, top_n und Temperature.     
+Bei Fragen außerhalb der SUSIpedia greift ein Fallback-Profil.
+
+*Details: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
+
+---
+
+### Auto-Save Pipeline *(deaktiviert Mai 2026)*
+
+Die Pipeline war vollständig implementiert und lief produktiv:
 - `worth_saving()` — regelbasierter Filter
 - `susi_evaluates()` — LLM bewertet ob eine Konversation speichernswert ist
 - `get_suggestions()` — Keyword-Router schlägt Zielordner vor
 - `create_summary()` — LLM erstellt kompakte Zusammenfassung
 - `save_to_susipedia()` — schreibt `.md` Datei und ruft `ingest.py` auf
 
-Der Ansatz war konzeptionell interessant — SUSI lernt durch strukturierte Dokumentation, nicht durch Gradientenabstieg. Das Problem: das System schreibt eigene Halluzinationen ins Langzeitgedächtnis zurück. Eine zerstörerische Feedback-Schleife, die erst durch formale Evaluation sichtbar wurde.
+Der Ansatz war konzeptionell interessant — SUSI lernt durch strukturierte Dokumentation, 
+nicht durch Gradientenabstieg. Das Problem: das System schreibt eigene Halluzinationen 
+ins Langzeitgedächtnis zurück. Eine zerstörerische Feedback-Schleife, die erst durch 
+formale Evaluation sichtbar wurde.
 
-**Aktueller Status:** Der Code ist noch aktiv. Die Pipeline wird solange nicht entfernt bis das 3-stufige Speichermodell als Nachfolger implementiert ist. Das ist ein bewusster Zustand — nicht Nachlässigkeit, sondern der Grundsatz "kein Abriss ohne Ersatz".
+**Aktueller Status:** Die Pipeline wurde im Mai 2026 deaktiviert. Die neue 3-stufige 
+Architektur mit Human-in-the-Loop ist in Planung (Q3 2026). Das Fundament steht mit 
+bge-reranker-v2-m3 (97% Korrektheit) bereits im Produktivbetrieb.
 
-→ *Vollständige Analyse und neue 3-Stufen-Architektur: [susi_05_sackgassen.md](susi_05_sackgassen.md)*
+→ *Vollständige Analyse: [susi_05_sackgassen.md](susi_05_sackgassen.md)*  
+→ *Reranker-Evolution: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
 
 ---
 
@@ -247,18 +308,22 @@ LoRA ist kein neues Konzept — es taucht in der Literatur regelmäßig auf. Der
 
 ## Aktuelle Architektur auf einen Blick *(Stand Juni 2026)*
 
-| Komponente | Aktuell | Nächster Schritt |
-|------------|---------|-----------------|
-| Embedding | bge-m3 | — |
-| Vector Store | ChromaDB | Hybrid Search evaluieren |
-| Chunk-Größe | 1000/50 | — |
-| Top-K | 5 | Cross-Encoder Reranker |
-| Retrieval | similarity | MMR evaluieren |
-| LLM | qwen2.5-coder:7b | llama3.1:8b für Zusammenfassung |
-| Auto-Save | aktiv (Ablösung in Arbeit) | 3-Stufen-Architektur |
+| Komponente | |
+|------------|-----------------|
+| Embedding | bge-m3 |
+| Vector Store | ChromaDB (617 Chunks) |
+| Chunk-Größe | 1000/50 |
+| Retrieval | similarity |
+| Reranker | BAAI/bge-reranker-v2-m3 (CPU, 97%) |
+| Router | Retrieval-getrieben, 5 Profile |
+| Query Rewriting | aktiv (Ich-Form + Folgefragen) |
+| LLM | qwen2.5-coder:7b + llama3.1:8b (profilabhängig) |
+| Config | susi_config.yaml (Single Source of Truth) |
+| Auto-Save | deaktiviert (Mai 2026) — HitL Queue Q3 2026 |
 
 ---
 
 *→ Zurück zur Übersicht: [susi_00_Übersicht.md](susi_00_übersicht.md)*  
-*→ Weiter: [susi_03_susipedia.md](susi_03_susipedia.md)*  
+→ *Weiter: [susi_03_susipedia.md](susi_03_susipedia.md)*  
+→ *Produktivbetrieb: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*  
 *Stand: Juni 2026 · Martin Freimuth*
