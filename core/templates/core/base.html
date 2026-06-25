@@ -562,5 +562,25 @@
   </head>
   <body>
     {% block body %}{% endblock %}
+
+    <script>
+      function getCookie(name) {
+        const v = document.cookie.match("(^|;) ?" + name + "=([^;]*)(;|$)");
+        return v ? v[2] : null;
+      }
+      document.body.addEventListener("htmx:configRequest", (e) => {
+        e.detail.headers["X-CSRFToken"] = getCookie("csrftoken");
+      });
+      document.body.addEventListener("htmx:afterSwap", (e) => {
+        if (e.target.id === "messages") scrollToBottom();
+
+        if (e.detail.target.id === "mode-toggle") {
+          const activeBtn = document.querySelector(".mode-btn.active");
+          if (activeBtn) {
+            document.getElementById("app-root").dataset.mode = activeBtn.dataset.mode;
+          }
+        }
+      });
+    </script>
   </body>
 </html>

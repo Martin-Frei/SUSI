@@ -6,7 +6,10 @@ Legt die CSV-Ergebnisse nach einzelnen Parametern auseinander.
 Score-Berechnung (wichtig für Tutor-Fragen):
     Score = Durchschnitt aller Einträge pro Parameter-Gruppe
     Einbezogen: manueller Score (0/1/2) UND Auto-Score 0 (Ausweichantworten)
+              UND final_score (RAGAS/Haiku-Bewertung aus ragas_scorer.py)
     Ausgeschlossen: Einträge ohne jeglichen Score
+    
+    Priorität: auto_score=0 > score_manuell > final_score
     
     Skala: 0.0 = alle falsch, 1.0 = alle teilweise, 2.0 = alle korrekt
     
@@ -45,19 +48,27 @@ def get_effektiver_score(row: dict):
     Reihenfolge:
         1. Auto-Score 0 (Ausweichantwort erkannt) → 0
         2. Manueller Score (0/1/2) → jeweiliger Wert
-        3. Kein Score → None (wird ausgeschlossen)
+        3. final_score (RAGAS/Haiku) → jeweiliger Wert
+        4. Kein Score → None (wird ausgeschlossen)
     
     Wichtig: Auto-Score 0 wird IMMER als 0 gewertet,
     auch wenn manuell nichts eingetragen wurde.
+    final_score wird nur verwendet wenn weder auto noch manuell gesetzt.
     """
     auto = row.get("auto_score", "")
     manuell = row.get("score_manuell", "")
+    final = row.get("final_score", "")
 
     if auto == "0":
         return 0.0
     if manuell not in ("", None, "-1"):
         try:
             return float(manuell)
+        except ValueError:
+            pass
+    if final not in ("", None):
+        try:
+            return float(final)
         except ValueError:
             pass
     return None

@@ -1,14 +1,14 @@
-﻿# SUSI Evaluation Lauf D (Juni 2026)
-# Ziel: Score-Skala fix verifizieren + bge-reranker-v2-m3 korrekt
-# Fragen: 40 (full_evaluation aus testfragen.json)
-# Runs:   20 Configs x 40 = 800
-# Dauer:  ca. 60-90 Minuten
+# ── SUSI Evaluation — Lauf C (Juni 2026) ─────────────────────────
+# Ziel: Reranker-Effekt + MMR vs Similarity + qwen vs llama
+# Fragen: 293 (full_run aus testfragen_big_run.json)
+# Runs:   20 Configs x 293 = 5.860
+# Dauer:  ca. 8-10 Stunden (Overnight)
 
 meta:
-  name: "SUSI Eval Lauf D Score-Fix + bge-reranker"
-  version: "4.0"
-  datum: "2026-06-24"
-  fragen_path: "tools/evaluation/testfragen.json"
+  name: "SUSI Eval Lauf C — Reranker + Algorithmus + LLM Vergleich"
+  version: "3.0"
+  datum: "2026-06-12"
+  fragen_path: "tools/evaluation/testfragen_big_run.json"
   output_path: "tools/evaluation/results"
 
 data_engineering:
@@ -53,7 +53,7 @@ reranker:
       top_k_filter: [3, 5]   # k=3 und k=5 ohne Reranker
 
     - active: true
-      model: "BAAI/bge-reranker-v2-m3"
+      model: "BAAI/bge-reranker-v2-m3" 
       top_n: 3
       top_k_filter: [5, 7, 9]  # k=5,7,9 mit Reranker
 

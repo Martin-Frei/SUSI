@@ -60,7 +60,7 @@ from evaluator import (
     berechne_bert_scores, berechne_rouge_scores, pruefe_ausweichantwort
 )
 from indexer import get_collection_name, find_config, load_config
-from auto_scorer import berechne_auto_score, zeige_auto_score
+from auto_scorer import berechne_auto_score, zeige_auto_score, berechne_qualitaets_score
 
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
 
@@ -360,7 +360,8 @@ def nachbewertung_starten(csv_path: str):
                       f"ChunkROUGE: {float(chunk_rouge) if chunk_rouge else 0:.3f}")
 
             print(f"─"*60)
-            print(f"0=Falsch | 1=Teilweise | 2=Korrekt | s=Skip | q=Beenden")
+            print(f"Qualitätsbewertung: 0=Falsch | 1=Teilweise | 2=Korrekt | s=Skip | q=Beenden")
+            print(f"(Nur 0-2 gültig — Diagnosescores 3-5 gehören in auto_score, nicht hier)")
 
             while True:
                 eingabe = input("Score: ").strip().lower()
@@ -368,6 +369,9 @@ def nachbewertung_starten(csv_path: str):
                     daten[zeilen_nr]["score_manuell"] = eingabe
                     bewertet += 1
                     break
+                elif eingabe in ("3", "4", "5"):
+                    print("⚠️  Diagnosescores (3-5) sind ungültig für score_manuell.")
+                    print("   Bitte 0=Falsch, 1=Teilweise oder 2=Korrekt eingeben.")
                 elif eingabe == "s":
                     uebersprungen += 1
                     break
@@ -645,7 +649,13 @@ def main():
                         drucke_zusammenfassung(output_path)
                         return
                 elif antwort and not auto_result["manuell"]:
-                    score_man = auto_result["score"]
+                    # Qualitätsscore (0/2/None) separat berechnen — nie auto_score (0-5) verwenden
+                    score_man = berechne_qualitaets_score(
+                        antwort=antwort,
+                        antwort_bert=bert_info.get("antwort_bert"),
+                        antwort_rougeL=rouge_info.get("antwort_rougeL"),
+                        auto_score_ausweich=0 if auto_result.get("score") == 0 else None
+                    )
 
                 if args.judge and antwort and auto_result["manuell"]:
                     judge_cfg = config.get("evaluation", {}).get("judge_model", {})

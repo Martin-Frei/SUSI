@@ -1,0 +1,17 @@
+{# core/templates/core/partials/mode_toggle.html #}
+{# Wird von set_mode_view zurückgegeben und ersetzt #mode-toggle im Header. #}
+{# Enthält alle drei Mode-Buttons mit aktualisiertem active-State. #}
+
+<div class="mode-toggle" id="mode-toggle">
+  {% for m, label in modes|default:"" %}
+  <button
+    class="mode-btn {% if chat_mode == m %}active{% endif %}"
+    data-mode="{{ m }}"
+    hx-post="{% url 'core:set_mode' %}"
+    hx-vals='{"mode": "{{ m }}"}'
+    hx-target="#mode-toggle"
+    hx-swap="outerHTML"
+    hx-on::after-request="updateModeData(event);"
+  >{{ label }}</button>
+  {% endfor %}
+</div>

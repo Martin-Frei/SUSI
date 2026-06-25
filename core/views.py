@@ -2,9 +2,10 @@
 
 import yaml
 import os
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.http import HttpResponse
 from django.views.decorators.http import require_POST
+from .models import Chat, Message
 
 # Config einmalig beim Start laden
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "rag", "susi_config.yaml")
@@ -16,11 +17,48 @@ def _load_config():
 cfg = _load_config()
 
 
+# ── Hilfsfunktion: aktiven Chat aus Session holen oder neu anlegen ─────────
+# Die Session speichert nur noch die active_chat_id (UUID).
+# Alle Messages werden aus der DB geladen.
+# Kein History-Dict mehr in der Session.
+
+def _get_or_create_chat(request) -> Chat:
+    """
+    Gibt den aktiven Chat zurück oder legt einen neuen an.
+
+    Die active_chat_id wird in der Session gespeichert.
+    Existiert kein Chat mit dieser ID (z.B. nach DB-Reset), wird ein neuer angelegt.
+    """
+    chat_id  = request.session.get("active_chat_id")
+    chat_mode = request.session.get("chat_mode", "AUTO")
+
+    if chat_id:
+        try:
+            return Chat.objects.get(id=chat_id)
+        except Chat.DoesNotExist:
+            pass
+
+    # Neuen Chat anlegen
+    chat = Chat.objects.create(mode=chat_mode)
+    request.session["active_chat_id"] = str(chat.id)
+    return chat
+
+
 def chat_view(request):
     """Hauptseite — Chat mit SUSI"""
-    history = request.session.get("history", [])
+    chat      = _get_or_create_chat(request)
+    messages  = chat.messages.all()
+    chat_mode = request.session.get("chat_mode", "AUTO")
+
+    # Alle Chats für die Sidebar-Liste (neueste zuerst)
+    all_chats = Chat.objects.all()
+
     return render(request, "core/chat.html", {
-        "history":         history,
+        "chat":            chat,
+        "messages":        messages,
+        "all_chats":       all_chats,
+        "chat_mode":       chat_mode,
+        "modes":           [("AUTO", "AUTO"), ("MANUELL", "MANUELL"), ("CODING", "CODING")],
         "llm_model":       cfg["generation"]["llm_model"],
         "embedding_model": cfg["retrieval"]["embedding_model"],
         "top_k":           cfg["retrieval"]["top_k"],
@@ -32,6 +70,32 @@ def chat_view(request):
 
 
 @require_POST
+def new_chat_view(request):
+    """HTMX-Endpunkt — Neuen Chat anlegen und aktivieren"""
+    chat_mode = request.session.get("chat_mode", "AUTO")
+    chat = Chat.objects.create(mode=chat_mode)
+    request.session["active_chat_id"] = str(chat.id)
+    request.session.modified = True
+
+    # Komplette Seite neu laden — einfachste Lösung für Chat-Wechsel
+    from django.shortcuts import redirect
+    return redirect("core:chat")
+
+
+@require_POST
+def switch_chat_view(request, chat_id):
+    """HTMX-Endpunkt — Zu einem anderen Chat wechseln"""
+    # Existenz prüfen, 404 wenn nicht vorhanden
+    chat = get_object_or_404(Chat, id=chat_id)
+    request.session["active_chat_id"] = str(chat.id)
+    request.session["chat_mode"] = chat.mode
+    request.session.modified = True
+
+    from django.shortcuts import redirect
+    return redirect("core:chat")
+
+
+@require_POST
 def ask_view(request):
     """HTMX-Endpunkt — Frage stellen, Antwort + Metriken zurückgeben"""
     from rag.query import ask_susi
@@ -40,61 +104,78 @@ def ask_view(request):
     if not question:
         return HttpResponse("")
 
-    # ── Chat-History für Query Rewriter aufbereiten ────────────────
-    # Aus der Session-History die letzten Q/A Paare extrahieren.
-    # Der Rewriter nutzt max. 2 Paare um Folgefragen aufzulösen.
-    # Beispiel: "the coast line you mention" → Rewriter sieht vorherige
-    # Antwort und kann den Bezug korrekt auflösen.
-    #
-    # Format für rewrite_query(): [{"question": str, "answer": str}, ...]
-    # Nur vollständige Paare (user + susi) werden übergeben.
-    session_history = request.session.get("history", [])
+    chat      = _get_or_create_chat(request)
+    chat_mode = request.session.get("chat_mode", "AUTO")
+
+    # ── Chat-History für Query Rewriter aus DB laden ───────────────
+    # Letzte 2 vollständige Q/A-Paare aus der DB holen.
+    # Nur Messages des aktiven Chats — kein Cross-Chat-Kontext.
+    db_messages  = list(chat.messages.order_by("created_at"))
     chat_history = []
     i = 0
-    while i < len(session_history) - 1:
-        if session_history[i]["role"] == "user" and session_history[i+1]["role"] == "susi":
+    while i < len(db_messages) - 1:
+        if db_messages[i].role == "user" and db_messages[i+1].role == "susi":
             chat_history.append({
-                "question": session_history[i]["content"],
-                "answer":   session_history[i+1]["content"],
+                "question": db_messages[i].content,
+                "answer":   db_messages[i+1].content[:200],  # Rewriter braucht nicht den vollen Text
             })
             i += 2
         else:
             i += 1
-    # Nur die letzten 2 Paare — Rewriter soll nicht ausufern
     chat_history = chat_history[-2:] if chat_history else None
 
-    result = ask_susi(question, chat_history=chat_history)
+    # ── User-Message in DB speichern ──────────────────────────────
+    Message.objects.create(
+        chat    = chat,
+        role    = "user",
+        content = question,
+    )
 
-    # History in Session speichern (inkl. Metriken)
-    history = request.session.get("history", [])
-    history.append({
-        "role":    "user",
-        "content": question,
-    })
-    history.append({
-        "role":                  "susi",
-        "content":               result["answer"],
-        "tok_per_sec":           result["tok_per_sec"],
-        "antwortzeit_sek":       result["antwortzeit_sek"],
-        "tokens_generiert":      result["tokens_generiert"],
-        "quelldateien":          result["quelldateien"],
-        "reranker_used":         result.get("reranker_used", False),
-        "chunks_gefunden":       result.get("chunks_gefunden", 0),
-        "chunks_nach_reranking": result.get("chunks_nach_reranking", 0),
-    })
-    request.session["history"] = history
-    request.session.modified = True
+    # ── SUSI fragen ───────────────────────────────────────────────
+    result = ask_susi(question, chat_history=chat_history, mode=chat_mode)
+
+    # ── SUSI-Antwort mit allen Metadaten in DB speichern ──────────
+    susi_msg = Message.objects.create(
+        chat                  = chat,
+        role                  = "susi",
+        content               = result["answer"],
+        tok_per_sec           = result.get("tok_per_sec"),
+        antwortzeit_sek       = result.get("antwortzeit_sek"),
+        tokens_generiert      = result.get("tokens_generiert"),
+        llm_model             = result.get("llm_model", ""),
+        router_profil         = result.get("router_profil", ""),
+        reranker_used         = result.get("reranker_used", False),
+        chunks_gefunden       = result.get("chunks_gefunden", 0),
+        chunks_nach_reranking = result.get("chunks_nach_reranking", 0),
+        rewritten_query       = result.get("rewritten_query", ""),
+        quelldateien          = result.get("quelldateien", []),
+    )
+
+    # ── Chat-Titel automatisch setzen (erste Frage = Titel) ───────
+    # Nur beim allerersten Q/A-Paar — danach bleibt der Titel.
+    if chat.title == "Neuer Chat":
+        chat.title = question[:80]
+        chat.mode  = chat_mode
+        chat.save()
+
+    # Chat updated_at aktualisieren (auto_now=True macht das automatisch
+    # beim save() — aber wir triggern es explizit damit die Sidebar-
+    # Sortierung stimmt)
+    Chat.objects.filter(id=chat.id).update(updated_at=susi_msg.created_at)
 
     return render(request, "core/partials/message_pair.html", {
         "question":              question,
         "answer":                result["answer"],
-        "tok_per_sec":           result["tok_per_sec"],
-        "antwortzeit_sek":       result["antwortzeit_sek"],
-        "tokens_generiert":      result["tokens_generiert"],
-        "quelldateien":          result["quelldateien"],
+        "tok_per_sec":           result.get("tok_per_sec"),
+        "antwortzeit_sek":       result.get("antwortzeit_sek"),
+        "tokens_generiert":      result.get("tokens_generiert"),
+        "quelldateien":          result.get("quelldateien", []),
         "reranker_used":         result.get("reranker_used", False),
         "chunks_gefunden":       result.get("chunks_gefunden", 0),
         "chunks_nach_reranking": result.get("chunks_nach_reranking", 0),
+        "susi_msg_id":           str(susi_msg.id),
+        "router_profil":         result.get("router_profil", ""),
+        "llm_model":             result.get("llm_model", ""),
     })
 
 
@@ -121,9 +202,10 @@ def settings_view(request):
 
 
 def history_view(request):
-    """HTMX-Endpunkt — Chat-History als Fragment zurückgeben"""
-    history = request.session.get("history", [])
-    return render(request, "core/history.html", {"history": history})
+    """HTMX-Endpunkt — Chat-History als Fragment (legacy, für Kompatibilität)"""
+    chat     = _get_or_create_chat(request)
+    messages = chat.messages.all()
+    return render(request, "core/history.html", {"messages": messages})
 
 
 @require_POST
@@ -149,3 +231,82 @@ def upload_view(request):
         "filename": uploaded_file.name,
         "success":  True,
     })
+
+
+@require_POST
+def set_mode_view(request):
+    """HTMX-Endpunkt — Chat-Modus wechseln (AUTO / MANUELL / CODING)"""
+    valid_modes = {"AUTO", "MANUELL", "CODING"}
+    mode = request.POST.get("mode", "AUTO").upper()
+    if mode not in valid_modes:
+        mode = "AUTO"
+
+    request.session["chat_mode"] = mode
+    request.session.modified = True
+
+    # Modus auch am aktiven Chat speichern
+    chat = _get_or_create_chat(request)
+    Chat.objects.filter(id=chat.id).update(mode=mode)
+
+    return render(request, "core/partials/mode_toggle.html", {
+        "chat_mode":     mode,
+        "modes":         [("AUTO", "AUTO"), ("MANUELL", "MANUELL"), ("CODING", "CODING")],
+        "llm_model":     cfg["generation"]["llm_model"],
+        "embedding_model": cfg["retrieval"]["embedding_model"],
+        "top_k":         cfg["retrieval"]["top_k"],
+        "num_ctx":       cfg["generation"]["num_ctx"],
+        "algorithm":     cfg["retrieval"]["algorithm"],
+        "temperature":   cfg["generation"]["temperature"],
+        "system_prompt": cfg["generation"]["system_prompt"],
+    })
+
+
+# ── Profil → Zielordner Mapping ───────────────────────────────────────────
+# Wird beim Anlegen eines QueueItems genutzt um den Zielordner vorzuschlagen.
+# Martin kann den Ordner im Review-UI noch ändern.
+PROFIL_TO_FOLDER = {
+    "susi":       "docs/susi/",
+    "projekte":   "docs/projekte/",
+    "lernen":     "docs/lernen/",
+    "persoenlich": "docs/martin/",
+    "technik":    "docs/technik/",
+    "fallback":   "docs/queue/",
+}
+
+
+@require_POST
+def queue_add_view(request):
+    """HTMX-Endpunkt — SUSI-Antwort in die HitL Queue aufnehmen.
+
+    Legt ein QueueItem mit status='pending' an.
+    Gibt einen Mini-Fragment zurück der den "→ Queue" Button
+    durch "✓ in Queue" ersetzt.
+
+    POST-Parameter:
+        message_id  — UUID der Message die in die Queue soll
+    """
+    from .models import QueueItem
+
+    message_id = request.POST.get("message_id", "").strip()
+    if not message_id:
+        return HttpResponse('<span style="color:var(--error);font-size:10px;">Fehler: keine Message-ID</span>')
+
+    message = get_object_or_404(Message, id=message_id, role="susi")
+
+    # Zielordner aus router_profil ableiten
+    target_folder = PROFIL_TO_FOLDER.get(message.router_profil, "docs/queue/")
+
+    # QueueItem anlegen — content kopiert von Message, editierbar beim Review
+    QueueItem.objects.create(
+        message       = message,
+        content       = message.content,
+        target_folder = target_folder,
+        router_profil = message.router_profil,
+        quelldateien  = message.quelldateien,
+        mode          = message.chat.mode,
+    )
+
+    # Button durch Bestätigung ersetzen
+    return HttpResponse(
+        '<span class="queue-confirmed">✓ in Queue</span>'
+    )

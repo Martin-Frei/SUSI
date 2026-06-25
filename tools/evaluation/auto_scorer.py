@@ -180,10 +180,71 @@ def berechne_auto_score(
     }
 
 
+# ── Qualitätsscore (0/2 nur bei hoher Konfidenz) ─────────────────
+#
+# Schreibt nur in score_manuell — und nur wenn sicher:
+#   Score 0 → Ausweichantwort erkannt (100% sicher)
+#   Score 2 → ROUGE-L + BERT beide hoch (hohe Konfidenz)
+#   None    → Grauzone → manuell bewerten
+#
+# Score 1 wird NIE automatisch gesetzt — zu unsicher.
+# Diagnosescore (0-5) läuft separat in berechne_auto_score().
+
+def berechne_qualitaets_score(
+    antwort: str,
+    antwort_bert: Optional[float],
+    antwort_rougeL: Optional[float],
+    auto_score_ausweich: Optional[int] = None
+) -> Optional[int]:
+    """
+    Berechnet den Qualitätsscore (0/2/None) für score_manuell.
+
+    Fragt: "Ist die Antwort für den User brauchbar?"
+    Nur bei hoher Konfidenz automatisch — sonst None (manuell nötig).
+
+    Skala:
+        0    → Ausweichantwort erkannt — sicher falsch
+        2    → ROUGE-L > 0.25 + BERT > 0.75 — sicher korrekt
+        None → Grauzone — manuell bewerten
+
+    Score 1 (teilweise) wird nie automatisch gesetzt.
+    Wird nie mit auto_score (0-5) vermischt.
+
+    Args:
+        antwort:             Generierte Antwort
+        antwort_bert:        BERTScore Antwort vs Referenz
+        antwort_rougeL:      ROUGE-L Antwort vs Referenz
+        auto_score_ausweich: Wenn 0 → Ausweichantwort bereits erkannt
+
+    Returns:
+        0, 2 oder None
+    """
+    # Ausweichantwort → sicher Score 0
+    if auto_score_ausweich == 0:
+        return 0
+
+    if antwort:
+        antwort_lower = antwort.lower().strip()
+        for phrase in AUSWEICH_PHRASEN:
+            if phrase == antwort_lower or antwort_lower.startswith(phrase):
+                return 0
+
+    # Metriken fehlen → Grauzone
+    if antwort_bert is None or antwort_rougeL is None:
+        return None
+
+    # Beide Metriken hoch → sicher Score 2
+    if antwort_rougeL > 0.25 and antwort_bert > 0.75:
+        return 2
+
+    # Alles andere → manuell
+    return None
+
+
 # ── Konsolen-Anzeige ──────────────────────────────────────────────
 
 def zeige_auto_score(result: dict, frage: str, referenz: str, antwort: str,
-                     bert_info: dict = None, rouge_info: dict = None) -> Optional[int]:
+                     bert_info: dict | None = None, rouge_info: dict | None = None) -> Optional[int]:
     SCORE_LABELS = {
         0: "Ausweichantwort",
         1: "Halluzination",
@@ -213,20 +274,26 @@ def zeige_auto_score(result: dict, frage: str, referenz: str, antwort: str,
               f"Delta: {bert_info['delta']:+.3f}{rouge_str}")
 
     print(f"🔶 Grauzone — {result['grund']}")
+    print(f"   Diagnose (auto_score): {result['score']} — wird automatisch gespeichert")
     print(f"─"*60)
-    print(f"Skala: 0=Ausweich | 1=Halluz | 2=Training | 3=RAG✅ | 4=RAGGen | 5=RAGChunk")
-    print(f"       s=Überspringen | q=Beenden")
+    print(f"Qualitätsbewertung für score_manuell:")
+    print(f"  0 = Falsch/nutzlos | 1 = Teilweise | 2 = Korrekt")
+    print(f"  s = Überspringen   | q = Beenden")
+    print(f"  (Diagnosescore 0-5 wird separat in auto_score gespeichert)")
 
     while True:
-        eingabe = input("Score: ").strip().lower()
-        if eingabe in ("0", "1", "2", "3", "4", "5"):
+        eingabe = input("Score (0/1/2): ").strip().lower()
+        if eingabe in ("0", "1", "2"):
             return int(eingabe)
+        elif eingabe in ("3", "4", "5"):
+            print("⚠️  Diagnosescores (3-5) gehören in auto_score, nicht hier.")
+            print("   Bitte 0=Falsch, 1=Teilweise, 2=Korrekt eingeben.")
         elif eingabe == "s":
             return -1
         elif eingabe == "q":
             raise KeyboardInterrupt("Beenden")
         else:
-            print("Bitte 0-5, s oder q eingeben.")
+            print("Bitte 0, 1, 2, s oder q eingeben.")
 
 
 # ── Batch-Analyse bestehender CSV ────────────────────────────────

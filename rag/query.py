@@ -223,7 +223,7 @@ Umgeschrieben:"""
 
 
 # ── Kern-Funktion ─────────────────────────────────────────────────
-def ask_susi(question, chat_history: list | None = None):
+def ask_susi(question, chat_history: list | None = None, mode: str = "AUTO"):
     """
     Stellt eine Frage an SUSI und gibt ein Dict zurück.
 
@@ -233,6 +233,10 @@ def ask_susi(question, chat_history: list | None = None):
                       Format: [{"question": str, "answer": str}, ...]
                       Wird von views.py befüllt — max. letzte 2 Q/A Paare.
                       None = kein Chat-Kontext (z.B. erste Frage der Session)
+        mode:         Chat-Modus aus der Session.
+                      "AUTO"    — Router + Reranker bestimmen Profil automatisch (Standard)
+                      "MANUELL" — Router wird übersprungen, Config-Parameter gelten direkt
+                      "CODING"  — reserviert (verhält sich aktuell wie MANUELL)
 
     Returns:
         {
@@ -311,7 +315,9 @@ def ask_susi(question, chat_history: list | None = None):
             reranker_used = True
 
     # 3. Router — Profil anhand der Top-Chunks bestimmen
-    if router_active and ranked_docs:
+    # In MANUELL/CODING: Router überspringen, Config-Parameter gelten direkt.
+    # In AUTO: Router läuft normal via ranked_docs.
+    if router_active and ranked_docs and mode == "AUTO":
         folder_profile_map = cfg.get("router", {}).get("folder_profile_map", {})
         profiles           = cfg.get("profiles", {})
         system_prompts     = cfg.get("system_prompts", {})
@@ -535,4 +541,3 @@ if __name__ == "__main__":
         if worth_saving(question):
             if susi_evaluates(question, result["answer"]):
                 show_save_prompt(question, result["answer"])
-                

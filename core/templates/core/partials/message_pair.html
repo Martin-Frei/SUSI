@@ -7,9 +7,25 @@
     <div class="msg__meta">
       ⚡ {{ tok_per_sec }} tok/s &nbsp;·&nbsp;
       {{ tokens_generiert }} Tokens &nbsp;·&nbsp;
-      {{ antwortzeit_sek }}s
+      {{ antwortzeit_sek }}s &nbsp;·&nbsp;
+      🤖 {{ router_profil }} · {{ llm_model }}
       {% if reranker_used %}&nbsp;·&nbsp;🔁 reranked{% endif %}
     </div>
+
+    {# ── Queue Button ──────────────────────────────────────────────── #}
+    {# Schickt die Message-ID per HTMX POST an queue/add/             #}
+    {# Button wird nach dem Klick durch "✓ in Queue" ersetzt          #}
+    <div class="msg__queue" id="queue-btn-{{ susi_msg_id }}">
+      <button
+        class="queue-btn"
+        name="message_id"
+        value="{{ susi_msg_id }}"
+        hx-post="{% url 'core:queue_add' %}"
+        hx-target="#queue-btn-{{ susi_msg_id }}"
+        hx-swap="innerHTML"
+      >→ Queue</button>
+    </div>
+
   </div>
 </div>
 
