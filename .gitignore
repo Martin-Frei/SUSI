@@ -69,3 +69,7 @@ tools/evaluation/results/*.json
 .idea/*.json
 
 .claude/
+# Temporaere Debug-Scripts
+check_*.py
+debug_score.py
+quick_analyse.py
