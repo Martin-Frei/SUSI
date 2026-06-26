@@ -41,36 +41,56 @@ def lade_csv(csv_path: str) -> list:
         return list(csv.DictReader(f))
 
 
+# Mapping Diagnoseskala (0-5) auf Qualitaetsskala (0-2)
+# auto_score=0 Ausweichantwort    -> Qualitaet 0
+# auto_score=1 Halluzination      -> Qualitaet 0
+# auto_score=2 Training korrekt   -> Qualitaet 1 (richtige Antwort, falscher Weg)
+# auto_score=3 RAG korrekt        -> Qualitaet 2
+# auto_score=4 Generation-Problem -> Qualitaet 0
+# auto_score=5 Falscher Chunk     -> Qualitaet 0
+AUTO_SCORE_MAPPING = {"0": 0.0, "1": 0.0, "2": 1.0, "3": 2.0, "4": 0.0, "5": 0.0}
+
+
 def get_effektiver_score(row: dict):
     """
     Effektiven Score einer Zeile bestimmen.
-    
-    Reihenfolge:
-        1. Auto-Score 0 (Ausweichantwort erkannt) → 0
-        2. Manueller Score (0/1/2) → jeweiliger Wert
-        3. final_score (RAGAS/Haiku) → jeweiliger Wert
-        4. Kein Score → None (wird ausgeschlossen)
-    
-    Wichtig: Auto-Score 0 wird IMMER als 0 gewertet,
-    auch wenn manuell nichts eingetragen wurde.
-    final_score wird nur verwendet wenn weder auto noch manuell gesetzt.
-    """
-    auto = row.get("auto_score", "")
-    manuell = row.get("score_manuell", "")
-    final = row.get("final_score", "")
 
-    if auto == "0":
-        return 0.0
+    Reihenfolge:
+        1. score_manuell (0/1/2) — hoehere Prioritaet als auto
+        2. final_score (RAGAS/Haiku, 0/1/2)
+        3. auto_score (0-5) via Mapping auf Qualitaetsskala
+        4. Kein Score -> None (wird ausgeschlossen)
+
+    Mapping Diagnoseskala -> Qualitaetsskala:
+        0 Ausweichantwort    -> 0
+        1 Halluzination      -> 0
+        2 Training korrekt   -> 1  (richtige Antwort, falscher Weg)
+        3 RAG korrekt        -> 2
+        4 Generation-Problem -> 0
+        5 Falscher Chunk     -> 0
+    """
+    auto = row.get("auto_score", "").strip()
+    manuell = row.get("score_manuell", "").strip()
+    final = row.get("final_score", "").strip()
+
+    # Manuell hat hoechste Prioritaet
     if manuell not in ("", None, "-1"):
         try:
             return float(manuell)
         except ValueError:
             pass
+
+    # RAGAS/Haiku Score
     if final not in ("", None):
         try:
             return float(final)
         except ValueError:
             pass
+
+    # Auto-Score via Mapping
+    if auto in AUTO_SCORE_MAPPING:
+        return AUTO_SCORE_MAPPING[auto]
+
     return None
 
 
@@ -368,11 +388,13 @@ def main():
     analysiere_parameter(daten, "top_k", "Top-K")
     analysiere_parameter(daten, "system_prompt_name", "System-Prompt")
     analysiere_parameter(daten, "llm_model", "LLM-Modell")
+    analysiere_parameter(daten, "thinking", "Thinking-Modus")
     analysiere_parameter(daten, "temperature", "Temperature")
     analysiere_kategorie(daten)
     kreuztabelle(daten, "embedding_model", "chunk_size", "Embedding × Chunk-Size")
     kreuztabelle(daten, "embedding_model", "system_prompt_name", "Embedding × Prompt")
     kreuztabelle(daten, "llm_model", "chunk_size", "LLM × Chunk-Size")
+    kreuztabelle(daten, "llm_model", "thinking", "LLM × Thinking")
 
     if args.korrektur:
         finde_verdaechtige_nullen(daten)

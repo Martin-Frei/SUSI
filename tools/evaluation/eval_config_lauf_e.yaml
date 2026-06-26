@@ -1,0 +1,79 @@
+# ── SUSI Evaluation — Lauf E: qwen3:8b thinking on vs off ────────
+# Ziel: qwen3:8b mit thinking=true vs thinking=false vergleichen
+# Smoke:    4 Fragen  x 2 Configs =   8 Runs  (~5 Min)
+# Eval:    40 Fragen  x 2 Configs =  80 Runs  (~30 Min)
+# Overnight: 293 Fragen x 2 Configs = 586 Runs (~6-8h)
+#
+# Aufruf Smoke:
+#   python tools/evaluation/grid_run.py --config tools/evaluation/eval_config_lauf_e.yaml --mode smoke
+# Aufruf Eval (40 Fragen):
+#   python tools/evaluation/grid_run.py --config tools/evaluation/eval_config_lauf_e.yaml --mode full
+# Aufruf Overnight (293 Fragen):
+#   python tools/evaluation/grid_run.py --config tools/evaluation/eval_config_lauf_e.yaml --fragen tools/evaluation/testfragen_big_run.json
+
+meta:
+  name: "SUSI Eval Lauf E — qwen3:8b thinking on vs off"
+  version: "1.0"
+  datum: "2026-06-25"
+  fragen_path: "tools/evaluation/testfragen.json"
+  output_path: "tools/evaluation/results"
+
+data_engineering:
+  chunk_sizes:
+    - 1000
+
+  chunk_overlaps:
+    - 50
+
+  separators:
+    default: ["## ", "### ", "\n\n", "\n", " "]
+
+  embedding_models:
+    - name: "bge-m3"
+      dim: 1024
+      active: true
+
+  embedding_device: "cuda"
+
+retrieval:
+  top_k_values:
+    - 7
+
+  algorithms:
+    - name: "similarity"
+      active: true
+
+  score_thresholds:
+    - null
+
+reranker:
+  configs:
+    - active: true
+      model: "BAAI/bge-reranker-v2-m3"
+      top_n: 3
+      top_k_filter: [7]
+
+generation:
+  llm_models:
+    - name: "qwen3:8b"
+      thinking: false
+      active: true
+    - name: "qwen3:8b"
+      thinking: true
+      active: true
+
+  temperatures:
+    - 0.0
+
+  system_prompts:
+    - name: "praezise_neu"
+      active: true
+      text: |
+        Du bist ein praeziser KI-Assistent.
+        Antworte basierend auf dem gegebenen Kontext.
+        Wenn du die Antwort nicht eindeutig findest,
+        gib an was du gefunden hast und markiere es als unsicher.
+        Sage NICHT einfach "nicht verfuegbar" wenn relevanter
+        Kontext vorhanden ist.
+        Keine Spekulationen aus eigenem Wissen.
+        Antworte in vollstaendigen Saetzen.

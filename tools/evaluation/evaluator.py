@@ -101,6 +101,7 @@ class EvalResult:
     frage: str
     referenzantwort: str
     generierte_antwort: str
+    thinking: bool = False
     kontext_text: str = ""          # tatsächliche Chunks für manuelle Inspektion
 
     # Scores
@@ -170,7 +171,7 @@ class CSVWriter:
         "run_id", "timestamp",
         "embedding_model", "chunk_size", "overlap", "separator",
         "top_k", "algorithm", "score_threshold",
-        "llm_model", "temperature", "system_prompt_name",
+        "llm_model", "thinking", "temperature", "system_prompt_name",
         "frage_id", "kategorie", "frage",
         "referenzantwort", "generierte_antwort", "kontext_text",
         "auto_score", "score_manuell", "score_judge",
