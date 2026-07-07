@@ -14,6 +14,7 @@ from sentence_transformers import CrossEncoder
 import pytz
 
 from rag.router import get_profile, apply_profile
+from rag import agent_datum
 
 # ── Sprach-Erkennung ──────────────────────────────────────────────
 # LLM-basierte Spracherkennung — zuverlässig für alle Sprachen.
@@ -182,8 +183,19 @@ Deine EINZIGE Aufgabe ist das Umschreiben. Bewerte den Inhalt NICHT. Lehne KEINE
 
 {history_block}Regeln:
 - Write ONLY in the language with ISO code '{lang}'. NEVER translate into another language.
-- "Ich / I" → "Martin Freimuth"
-- "mein/meine/mir/mich / my/me" → passende 3. Person
+- Behalte technische Fachbegriffe IMMER im englischen Original, unabhängig von der Zielsprache.
+  Beispiele: "Similarity Search", "Embedding", "Reranker", "Retrieval", "Chunk", "Router",
+  "Query Rewriting", "Vector Store" bleiben unverändert — übersetze sie NICHT.
+- Pronomen wie "er/sie/es/he/she/it" IMMER auf das zuletzt genannte konkrete Bezugsobjekt 
+  in der aktuellen Frage oder im Chat-Verlauf auflösen — egal ob das eine Person, ein Projekt,
+  ein System oder eine Sache ist.
+- "Ich / I" NUR dann zu "Martin Freimuth" auflösen, wenn der NUTZER selbst direkt von sich 
+  spricht (z.B. "Wann habe ich SUSI gebaut?" → Martin Freimuth).
+  Wenn "Ich" Teil eines Zitats, einer zitierten Aussage oder einer anderen Quelle ist 
+  (z.B. "Das sagte SUSI: Ich bleibe als Regel bestehen"), bleibt das Zitat UNVERÄNDERT — 
+  "Ich" bezieht sich dann auf den Sprecher des Zitats (SUSI), NICHT auf Martin Freimuth.
+- "mein/meine/mir/mich / my/me" → passende 3. Person bezogen auf Martin Freimuth, 
+  außer ebenfalls innerhalb eines Zitats.
 - Wenn die Frage auf eine vorherige Antwort verweist (z.B. "the coast line you mention"),
   löse den Bezug auf anhand des Chat-Verlaufs
 - Vage Referenzen auflösen (z.B. "das Projekt / the project" → konkreter Name wenn erkennbar)
@@ -223,7 +235,7 @@ Umgeschrieben:"""
 
 
 # ── Kern-Funktion ─────────────────────────────────────────────────
-def ask_susi(question, chat_history: list | None = None, mode: str = "AUTO"):
+def ask_susi(question, chat_history: list | None = None, mode: str = "auto"):
     """
     Stellt eine Frage an SUSI und gibt ein Dict zurück.
 
@@ -233,10 +245,15 @@ def ask_susi(question, chat_history: list | None = None, mode: str = "AUTO"):
                       Format: [{"question": str, "answer": str}, ...]
                       Wird von views.py befüllt — max. letzte 2 Q/A Paare.
                       None = kein Chat-Kontext (z.B. erste Frage der Session)
-        mode:         Chat-Modus aus der Session.
-                      "AUTO"    — Router + Reranker bestimmen Profil automatisch (Standard)
-                      "MANUELL" — Router wird übersprungen, Config-Parameter gelten direkt
-                      "CODING"  — reserviert (verhält sich aktuell wie MANUELL)
+        mode:         Frontend-Modus, gesetzt vom Chat-Toggle.
+                      "auto"    = Standard-Pipeline, Router aktiv, agent_datum
+                                  darf reine Kalenderfragen deterministisch
+                                  beantworten (LLM wird umgangen)
+                      "manuell" = User kontrolliert Modell/top_k/temp/num_ctx/
+                                  Prompt selbst, Router aus, kein Agent
+                      "coding"  = Ingest-Vorbereitung: SUSI verarbeitet ein
+                                  Dokument (PDF/MD/...) und bereitet den Text
+                                  für ingest.py auf, kein Agent
 
     Returns:
         {
@@ -282,6 +299,35 @@ def ask_susi(question, chat_history: list | None = None, mode: str = "AUTO"):
     # Beispiel: "What is X?" → detect_language() → "en" → Rewriter schreibt auf Englisch um
     # chat_history ermöglicht Folgefragen korrekt aufzulösen
     lang = detect_language(question, llm_model, keep_alive)
+
+    # 0a. agent_datum — SUSIs erstes Werkzeug im Sinne von Tool Use.
+    # Reine Kalenderfragen (Wochentag, Tage/Wochen zwischen zwei Daten,
+    # N Tage/Wochen ab heute) werden deterministisch per Python datetime
+    # beantwortet — kein LLM, kein Retrieval, keine Halluzination.
+    # Konservativ: nur im auto-Modus und nur wenn Deutsch erkannt wurde.
+    # Manuell = User will Kontrolle. Coding = Ingest-Vorbereitung.
+    # Details zur Klassifikation siehe rag/agent_datum.py.
+    if mode == "auto" and lang == "de" and agent_datum.ist_kalenderfrage(question):
+        agent_start = time.time()
+        agent_antwort = agent_datum.beantworte_kalenderfrage(question)
+        agent_wall = round(time.time() - agent_start, 3)
+        print(f"  🧮 agent_datum aktiv — deterministische Antwort ({agent_wall}s)")
+        return {
+            "answer":                agent_antwort,
+            "tok_per_sec":           0.0,
+            "antwortzeit_sek":       agent_wall,
+            "tokens_generiert":      0,
+            "quelldateien":          ["🧮 agent_datum (deterministisch)"],
+            "llm_model":             "agent_datum",
+            "embedding_model":       EMBEDDING_MODEL,
+            "reranker_used":         False,
+            "chunks_gefunden":       0,
+            "chunks_nach_reranking": 0,
+            "router_profil":         "agent_datum",
+            "thinking":              False,
+            "rewritten_query":       question,
+        }
+
     rewritten_query = question
     if query_rewrite:
         rewritten_query = rewrite_query(question, llm_model, keep_alive, chat_history, lang)
@@ -315,9 +361,7 @@ def ask_susi(question, chat_history: list | None = None, mode: str = "AUTO"):
             reranker_used = True
 
     # 3. Router — Profil anhand der Top-Chunks bestimmen
-    # In MANUELL/CODING: Router überspringen, Config-Parameter gelten direkt.
-    # In AUTO: Router läuft normal via ranked_docs.
-    if router_active and ranked_docs and mode == "AUTO":
+    if router_active and ranked_docs:
         folder_profile_map = cfg.get("router", {}).get("folder_profile_map", {})
         profiles           = cfg.get("profiles", {})
         system_prompts     = cfg.get("system_prompts", {})
@@ -400,6 +444,201 @@ Antwort:"""
         "thinking":              thinking,
         "rewritten_query":       rewritten_query,
     }
+
+
+
+# ── Eval-Pipeline ─────────────────────────────────────────────────
+def ask_susi_eval(question: str, chat_history: list | None = None) -> dict:
+    """
+    Komplette SUSI Live-Pipeline fuer die Evaluation (Lauf F).
+    NICHT fuer das Frontend -- nur fuer grid_run.py mit --live Flag.
+
+    Identisch zu ask_susi() aber mit zusaetzlichen Eval-Feldern:
+        kontext_vor_reranking   str   alle top_k Chunks getrennt durch ---
+        kontext_nach_reranking  str   nur top_n Chunks nach Reranker
+        chunk_scores            list  [(score, quelle, text[:100])] alle top_k
+
+    Diagnose-Schema:
+        Chunk nicht in kontext_vor_reranking  -> Retrieval-Problem (bge-m3)
+        Chunk in vor aber nicht in nach       -> Reranker-Problem
+        Chunk in nach aber falsche Antwort    -> LLM-Problem
+    """
+    now = get_time()
+    cfg = load_config()
+
+    top_k           = cfg["retrieval"]["top_k"]
+    algorithm       = cfg["retrieval"]["algorithm"]
+    llm_model       = cfg["generation"]["llm_model"]
+    temperature     = cfg["generation"]["temperature"]
+    num_ctx         = cfg["generation"]["num_ctx"]
+    keep_alive      = cfg["generation"]["keep_alive"]
+    prompt_name     = cfg["generation"]["system_prompt"]
+    system_prompt   = cfg["system_prompts"][prompt_name]
+    thinking        = False
+
+    reranker_active = cfg.get("reranker", {}).get("active", False)
+    reranker_top_n  = cfg.get("reranker", {}).get("top_n", 3)
+    router_active   = cfg.get("router", {}).get("active", False)
+    query_rewrite   = cfg.get("query_rewriting", {}).get("active", True)
+    router_profil   = "fallback"
+
+    # 0. Sprache + Rewriting (einmal!)
+    lang = detect_language(question, llm_model, keep_alive)
+
+    # 0a. agent_datum — auch in der Eval-Pipeline aktiv, damit grid_run
+    # den Produktions-Zustand widerspiegelt. Bei reinen Kalenderfragen
+    # muss die Bewertung genau das prüfen was das Frontend auch tut:
+    # deterministische Antwort ohne LLM.
+    if lang == "de" and agent_datum.ist_kalenderfrage(question):
+        agent_start = time.time()
+        agent_antwort = agent_datum.beantworte_kalenderfrage(question)
+        agent_wall = round(time.time() - agent_start, 3)
+        print(f"  🧮 agent_datum aktiv — deterministische Antwort ({agent_wall}s)")
+        return {
+            "answer":                 agent_antwort,
+            "tok_per_sec":            0.0,
+            "antwortzeit_sek":        agent_wall,
+            "tokens_generiert":       0,
+            "quelldateien":           ["🧮 agent_datum (deterministisch)"],
+            "llm_model":              "agent_datum",
+            "embedding_model":        EMBEDDING_MODEL,
+            "reranker_used":          False,
+            "chunks_gefunden":        0,
+            "chunks_nach_reranking":  0,
+            "router_profil":          "agent_datum",
+            "thinking":               False,
+            "rewritten_query":        question,
+            "kontext_vor_reranking":  "",
+            "kontext_nach_reranking": "",
+            "chunk_scores":           [],
+        }
+
+    rewritten_query = question
+    if query_rewrite:
+        rewritten_query = rewrite_query(question, llm_model, keep_alive, chat_history, lang)
+
+    # 1. Retrieval
+    embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
+    db = Chroma(persist_directory=CHROMA_PATH, embedding_function=embeddings)
+
+    if algorithm == "mmr":
+        docs = db.max_marginal_relevance_search(rewritten_query, k=top_k)
+    else:
+        docs = db.similarity_search(rewritten_query, k=top_k)
+
+    chunks_gefunden = len(docs)
+
+    # Kontext VOR Reranking speichern
+    kontext_vor = "\n---\n".join(
+        f"[{d.metadata.get('source', '?')}]\n{d.page_content}" for d in docs
+    )
+
+    # 2. Reranking
+    reranker_used = False
+    ranked_docs = []
+    chunk_scores = []
+
+    if reranker_active:
+        reranker = get_reranker()
+        if reranker:
+            pairs = [(rewritten_query, doc.page_content) for doc in docs]
+            scores = reranker.predict(pairs)
+            ranked_docs = sorted(
+                zip([float(s) for s in scores], docs),
+                key=lambda x: x[0],
+                reverse=True
+            )
+            chunk_scores = [
+                (round(s, 4), d.metadata.get("source", "?"), d.page_content[:100])
+                for s, d in ranked_docs
+            ]
+            docs = [doc for _, doc in ranked_docs[:reranker_top_n]]
+            reranker_used = True
+
+    # Kontext NACH Reranking speichern
+    kontext_nach = "\n---\n".join(
+        f"[{d.metadata.get('source', '?')}]\n{d.page_content}" for d in docs
+    )
+
+    # 3. Router
+    if router_active and ranked_docs:
+        folder_profile_map = cfg.get("router", {}).get("folder_profile_map", {})
+        profiles           = cfg.get("profiles", {})
+        system_prompts     = cfg.get("system_prompts", {})
+        fallback_profile   = cfg.get("router", {}).get("fallback_profile", "persoenlich")
+
+        profil_name, profil_config = get_profile(ranked_docs[:reranker_top_n], folder_profile_map, profiles, fallback_profile)
+        params = apply_profile(profil_config, system_prompts)
+
+        llm_model     = params["llm_model"]
+        temperature   = params["temperature"]
+        system_prompt = params["system_prompt"]
+        thinking      = params["thinking"]
+        router_profil = profil_name
+
+        print(f"  \U0001f916 LLM: {llm_model} | thinking: {thinking} | t={temperature}")
+
+    # 4. Kontext + Prompt
+    context = "\n\n".join([doc.page_content for doc in docs])
+    quelldateien = list({doc.metadata.get("source", "?") for doc in docs})
+
+    lang_instruction = f"Answer in the language with ISO code '{lang}'."
+    print(f"  \U0001f5e3\ufe0f  Sprach-Anweisung: {lang_instruction}")
+
+    prompt = f"""{system_prompt}
+
+Heute ist: {now}
+
+Kontext:
+{context}
+
+Frage: {question}
+
+WICHTIG: {lang_instruction}
+Antwort:"""
+
+    # 5. Ollama
+    options = {"temperature": temperature, "num_ctx": num_ctx}
+    if thinking:
+        options["thinking"] = True
+
+    payload = {
+        "model":      llm_model,
+        "prompt":     prompt,
+        "stream":     False,
+        "keep_alive": keep_alive,
+        "options":    options,
+    }
+
+    start = time.time()
+    response = requests.post(OLLAMA_URL, json=payload, timeout=120)
+    response.raise_for_status()
+    wall_time = round(time.time() - start, 2)
+
+    data = response.json()
+    eval_count    = data.get("eval_count", 0)
+    eval_duration = data.get("eval_duration", 1)
+    tok_per_sec   = round(eval_count / eval_duration * 1e9, 1) if eval_duration > 0 else 0.0
+
+    return {
+        "answer":                data.get("response", "").strip(),
+        "tok_per_sec":           tok_per_sec,
+        "antwortzeit_sek":       wall_time,
+        "tokens_generiert":      eval_count,
+        "quelldateien":          quelldateien,
+        "llm_model":             llm_model,
+        "embedding_model":       EMBEDDING_MODEL,
+        "reranker_used":         reranker_used,
+        "chunks_gefunden":       chunks_gefunden,
+        "chunks_nach_reranking": len(docs),
+        "router_profil":         router_profil,
+        "thinking":              thinking,
+        "rewritten_query":       rewritten_query,
+        "kontext_vor_reranking":  kontext_vor,
+        "kontext_nach_reranking": kontext_nach,
+        "chunk_scores":           chunk_scores,
+    }
+
 
 
 # ── Retrieval Debug ───────────────────────────────────────────────
