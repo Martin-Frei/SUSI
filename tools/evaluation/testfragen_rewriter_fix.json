@@ -1,0 +1,88 @@
+{
+  "_meta": {
+    "beschreibung": "SUSI Rewriter-Fix Re-Test — 10 gezielte Fragen, Kategorie technisch",
+    "version": "1.0",
+    "erstellt": "2026-06-30",
+    "hinweis": "Testet den Anti-Uebersetzungs-Fix (Similarity Search etc.) und die ueberarbeitete Coreference-Regel im Rewriter-Prompt. Referenzantworten basieren auf dem aktuellen Stack (qwen2.5-coder:7b primaer, bge-m3, bge-reranker-v2-m3, chunk_size=1000, Router-Profile)."
+  },
+  "full_evaluation": {
+    "beschreibung": "10 Fragen — Kategorie technisch. Fokus auf englische Fachbegriffe und Pronomen-Aufloesung.",
+    "kategorien": {
+      "technisch": {
+        "beschreibung": "Gezielte Fragen zu Similarity Search, Reranker, Embedding und Coreference-Faellen",
+        "fragen": [
+          {
+            "id": "rwfix_01",
+            "frage": "Was ist Similarity Search bei SUSI?",
+            "referenzantwort": "SUSI verwendet Similarity Search als Retrieval-Methode in ChromaDB. Similarity Search gibt die top-k aehnlichsten Chunks basierend auf den bge-m3 Embeddings zurueck. Fuer den SUSI-Korpus liefert Similarity Search bessere Ergebnisse als MMR, weil Diversitaet bei einer persoenlichen Wissensdatenbank weniger wichtig ist als maximale Relevanz.",
+            "quelldatei": "technik/rag_einstellungen.md",
+            "schwierigkeit": "einfach"
+          },
+          {
+            "id": "rwfix_02",
+            "frage": "Welches Embedding-Modell nutzt SUSI und wie viele Dimensionen hat es?",
+            "referenzantwort": "SUSI verwendet BAAI/bge-m3 als Embedding-Modell mit 1024 Dimensionen. bge-m3 uebertrifft nomic-embed-text deutlich auf dem SUSI-Korpus, die Retrieval Hit Rate stieg dadurch von 36 Prozent auf 91 Prozent.",
+            "quelldatei": "technik/rag_einstellungen.md",
+            "schwierigkeit": "einfach"
+          },
+          {
+            "id": "rwfix_03",
+            "frage": "Was macht der Reranker in der SUSI Pipeline?",
+            "referenzantwort": "SUSI verwendet BAAI/bge-reranker-v2-m3 als zweite Bewertungsstufe nach dem initialen Retrieval. Der Reranker bewertet die retrieved Chunks nochmals auf Relevanz und reduziert die Kandidaten auf die besten 3 bis 5. Die Reranker-Scores fliessen direkt ins Router-Voting ein.",
+            "quelldatei": "technik/rag_einstellungen.md",
+            "schwierigkeit": "einfach"
+          },
+          {
+            "id": "rwfix_04",
+            "frage": "Der Reranker bewertet Chunks neu. Wie schnell ist er?",
+            "referenzantwort": "Der bge-reranker-v2-m3 laeuft lokal auf der RTX 4070 und bewertet die top-k retrieved Chunks in wenigen hundert Millisekunden bevor die besten 3 bis 5 an das LLM weitergegeben werden. Diese Frage testet ob 'er' korrekt auf den Reranker bezogen wird, nicht auf Martin Freimuth.",
+            "quelldatei": "technik/rag_einstellungen.md",
+            "schwierigkeit": "mittel"
+          },
+          {
+            "id": "rwfix_05",
+            "frage": "SUSI ist seit Maerz 2026 in Betrieb. Wie alt ist sie inzwischen?",
+            "referenzantwort": "SUSI wurde am 20. Maerz 2026 von Martin Freimuth ins Leben gerufen. Diese Frage testet ob 'sie' korrekt auf SUSI bezogen wird, nicht auf eine andere Entitaet.",
+            "quelldatei": "susi/susi.md",
+            "schwierigkeit": "mittel"
+          },
+          {
+            "id": "rwfix_06",
+            "frage": "Was ist der Unterschied zwischen Similarity Search und Embedding-basiertem Retrieval allgemein?",
+            "referenzantwort": "Embedding-basiertes Retrieval ist der Oberbegriff: Text wird in Vektoren umgewandelt und aehnliche Vektoren werden gefunden. Similarity Search ist eine konkrete Methode davon, die die k aehnlichsten Chunks per Kosinus- oder Vektordistanz zurueckgibt, ohne auf Diversitaet zu achten. SUSI nutzt Similarity Search ueber bge-m3 Embeddings.",
+            "quelldatei": "technik/rag_einstellungen.md",
+            "schwierigkeit": "mittel"
+          },
+          {
+            "id": "rwfix_07",
+            "frage": "Was bedeutet Query Rewriting in der SUSI Pipeline?",
+            "referenzantwort": "Query Rewriting ist der zweite Schritt der SUSI Query Pipeline. rewrite_query() loest Coreferences auf, also Pronomen und Folgefragen, basierend auf den letzten zwei Frage-Antwort-Paaren aus der Chat-History. Bei Fehlern wird immer die Original-Frage zurueckgegeben (fail-safe).",
+            "quelldatei": "susi/susiuebersicht.md",
+            "schwierigkeit": "mittel"
+          },
+          {
+            "id": "rwfix_08",
+            "frage": "Welche Rolle spielt der Vector Store bei SUSI und wie heisst die Collection?",
+            "referenzantwort": "SUSI verwendet ChromaDB als Vector Store mit der Collection langchain. Die Collection enthaelt aktuell 617 Chunks. Hash-basierte Aenderungserkennung sorgt dafuer, dass nur geaenderte Dateien neu indexiert werden.",
+            "quelldatei": "technik/chromadb_vektoren.md",
+            "schwierigkeit": "einfach"
+          },
+          {
+            "id": "rwfix_09",
+            "frage": "Das susi-Profil nutzt qwen2.5-coder:7b. Welchen top_k hat es?",
+            "referenzantwort": "Das susi-Profil verwendet top_k=7 und top_n=3 nach dem Reranking. Diese Frage testet ob 'es' korrekt auf das susi-Profil bezogen wird und nicht faelschlich aufgeloest wird.",
+            "quelldatei": "technik/rag_einstellungen.md",
+            "schwierigkeit": "mittel"
+          },
+          {
+            "id": "rwfix_10",
+            "frage": "Das sagte SUSI in einer frueheren Antwort: 'Ich arbeite vollstaendig lokal.' Was meinte sie damit?",
+            "referenzantwort": "SUSI laeuft komplett lokal ohne Cloud-Abhaengigkeiten auf Martins PC mit RTX 4070. Diese Frage testet den Zitat-Sonderfall: 'Ich' im Zitat bezieht sich auf SUSI als Sprecher, nicht auf Martin Freimuth, und 'sie' am Satzende muss ebenfalls korrekt auf SUSI zurueckverweisen.",
+            "quelldatei": "susi/susi_vision.md",
+            "schwierigkeit": "schwer"
+          }
+        ]
+      }
+    }
+  }
+}

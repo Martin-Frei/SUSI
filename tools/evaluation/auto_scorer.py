@@ -22,16 +22,47 @@ Schwellenwerte (aus 768 echten Einträgen berechnet):
 Automatisierungsgrad aus erstem Lauf: 71.6%
 Genauigkeit automatischer Entscheidungen: ~88%
 
+NEU (06.07.2026) — ValueCheck:
+    Deterministische Werte-Prüfung (Zahlen, Daten, Wochentage) läuft
+    VOR dem ROUGE/BERT-Entscheidungsbaum, wenn eine Referenz übergeben
+    wird. Schließt die Lücke dass Similarity-Metriken numerisch falsche,
+    aber fließend formulierte Antworten als korrekt bewerten
+    (Befund eval_20260630_1218: 10/10 auto_score=3, real 5/10 falsch).
+    Sicherer Wertefehler → Score 1. Unsichere Fälle → Grauzone.
+
 Aufruf standalone:
     python tools/evaluation/auto_scorer.py --csv tools/evaluation/results/eval_xxx.csv
 """
 
 from typing import Optional
 
+try:
+    from valuecheck import pruefe_werte as _valuecheck_pruefe
+    VALUECHECK_VERFUEGBAR = True
+except ImportError:
+    VALUECHECK_VERFUEGBAR = False
+
 
 # ── Konstanten ────────────────────────────────────────────────────
 MAX_SCORE = 5
 KORREKT_THRESHOLD = 2   # Score >= 2 gilt als korrekt
+
+# Zentrales Mapping Diagnostic-Skala (0-5) → Quality-Skala (0-2).
+# Bisher dreifach dupliziert in grid_run.py, ragas_scorer.py und
+# analyse_csv.py — hier ist ab jetzt die Single Source of Truth.
+# 0=Ausweich→0, 1=Halluzination→0, 2=Training→1,
+# 3=RAG korrekt→2, 4=Generation→0, 5=Falscher Chunk→0
+DIAG_ZU_QUALITAET = {0: 0, 1: 0, 2: 1, 3: 2, 4: 0, 5: 0}
+
+# Rollout-Schalter für ValueCheck:
+#   True  = sicherer Wertefehler wird hart Score 1 (Zielzustand)
+#   False = Wertefehler geht als Grauzone an RAGAS/Haiku (Einführungsphase,
+#           solange Referenzantworten noch Meta-Text/Störwerte enthalten)
+# Hintergrund: im Rewriter-Testset enthalten Referenzen Sätze wie
+# "Diese Frage testet ob ..." inkl. Hardware-Nummern (RTX 4070) — solche
+# Werte gehören nicht zur erwarteten Antwort und können korrekte Antworten
+# fälschlich hart durchfallen lassen (Beispiel rwfix_10).
+VALUECHECK_HART = True
 
 
 # ── Schwellenwerte (aus echten Daten) ─────────────────────────────
@@ -87,10 +118,15 @@ def berechne_auto_score(
     delta: Optional[float],
     antwort_rougeL: Optional[float],
     max_chunk_rougeL: Optional[float],
-    auto_score_ausweich: Optional[int] = None
+    auto_score_ausweich: Optional[int] = None,
+    referenz: Optional[str] = None
 ) -> dict:
     """
     Berechnet automatisch einen Score (0-5) aus den Metriken.
+
+    referenz: Optional. Wenn übergeben, läuft ValueCheck (deterministischer
+    Zahlen/Daten/Wochentags-Vergleich) VOR dem Metrik-Baum. Ohne Referenz
+    verhält sich die Funktion exakt wie bisher (rückwärtskompatibel).
     """
 
     # Schritt 1 — Ausweichantwort via Auto-Score Flag
@@ -113,6 +149,37 @@ def berechne_auto_score(
                     "grund": f"Ausweichantwort erkannt: '{phrase[:50]}'",
                     "manuell": False
                 }
+
+    # Schritt 1b — ValueCheck: deterministischer Werte-Vergleich
+    # Läuft nur wenn Referenz übergeben wurde und valuecheck.py vorhanden ist.
+    # BERT/ROUGE können numerisch falsche, fließend formulierte Antworten
+    # nicht erkennen — ValueCheck vergleicht Zahlen, Daten und Wochentage
+    # direkt Wert gegen Wert.
+    if referenz and antwort and VALUECHECK_VERFUEGBAR:
+        vc = _valuecheck_pruefe(referenz, antwort)
+        if vc["status"] == "falsch":
+            if VALUECHECK_HART:
+                return {
+                    "score": 1,
+                    "konfidenz": "hoch",
+                    "grund": f"ValueCheck: {vc['grund']}",
+                    "manuell": False
+                }
+            return {
+                "score": None,
+                "konfidenz": "grauzone",
+                "grund": f"ValueCheck (weich): {vc['grund']}",
+                "manuell": True
+            }
+        if vc["status"] == "grauzone":
+            return {
+                "score": None,
+                "konfidenz": "grauzone",
+                "grund": f"ValueCheck Grauzone: {vc['grund']}",
+                "manuell": True
+            }
+        # "korrekt" oder "inaktiv" → ValueCheck gibt frei,
+        # bestehender ROUGE/BERT-Baum entscheidet wie bisher.
 
     rouge = antwort_rougeL
     bert = antwort_bert
@@ -340,7 +407,8 @@ def analysiere_mit_auto_scorer(csv_path: str) -> dict:
             delta=delta,
             antwort_rougeL=rouge,
             max_chunk_rougeL=chunk_rouge,
-            auto_score_ausweich=0 if auto == "0" else None
+            auto_score_ausweich=0 if auto == "0" else None,
+            referenz=row.get("referenzantwort", "")
         )
 
         if result["manuell"]:

@@ -1,0 +1,85 @@
+# ── SUSI Evaluation — Lauf F: End-to-End Router Evaluation ───────
+# Ziel: Komplette Live-Pipeline testen inkl. Router
+#
+# WICHTIG: --live Flag verwenden!
+# Ohne --live läuft Lauf F wie ein normaler Grid-Run (manuelles Profil)
+#
+# Aufruf Smoke (4 Fragen):
+#   python tools/evaluation/grid_run.py --config tools/evaluation/eval_config_lauf_f.yaml --live --mode smoke
+#
+# Aufruf Full (40 Fragen):
+#   python tools/evaluation/grid_run.py --config tools/evaluation/eval_config_lauf_f.yaml --live --mode full
+#
+# Aufruf 293 Fragen:
+#   python tools/evaluation/grid_run.py --config tools/evaluation/eval_config_lauf_f.yaml --live --fragen tools/evaluation/testfragen_big_run.json
+#
+# Neue CSV-Spalten vs Lauf D/E:
+#   router_profil   ← welches Profil hat der Router gewählt?
+#   router_korrekt  ← stimmt es mit der Testfragen-Kategorie überein?
+#
+# Bewertung danach:
+#   python tools/evaluation/ragas_scorer.py --csv <csv> --haiku
+#   python tools/evaluation/analyse_csv.py --csv <csv>
+#   → Router-Accuracy wird automatisch berechnet
+
+meta:
+  name: "SUSI Eval Lauf F — End-to-End Router Evaluation"
+  version: "1.0"
+  datum: "2026-06-27"
+  fragen_path: "tools/evaluation/testfragen.json"
+  output_path: "tools/evaluation/results"
+
+# Im --live Modus werden diese Parameter ignoriert
+# (Router und susi_config.yaml bestimmen alles)
+# Sie bleiben hier für Fallback ohne --live Flag
+
+data_engineering:
+  chunk_sizes:
+    - 1000
+  chunk_overlaps:
+    - 50
+  separators:
+    default: ["## ", "### ", "\n\n", "\n", " "]
+  embedding_models:
+    - name: "bge-m3"
+      dim: 1024
+      active: true
+  embedding_device: "cuda"
+
+retrieval:
+  top_k_values:
+    - 7
+  algorithms:
+    - name: "similarity"
+      active: true
+  score_thresholds:
+    - null
+
+reranker:
+  configs:
+    - active: true
+      model: "BAAI/bge-reranker-v2-m3"
+      top_n: 3
+      top_k_filter: [7]
+
+generation:
+  llm_models:
+    - name: "qwen2.5-coder:7b"
+      thinking: false
+      active: true
+
+  temperatures:
+    - 0.0
+
+  system_prompts:
+    - name: "praezise_neu"
+      active: true
+      text: |
+        Du bist ein praeziser KI-Assistent.
+        Antworte basierend auf dem gegebenen Kontext.
+        Wenn du die Antwort nicht eindeutig findest,
+        gib an was du gefunden hast und markiere es als unsicher.
+        Sage NICHT einfach "nicht verfuegbar" wenn relevanter
+        Kontext vorhanden ist.
+        Keine Spekulationen aus eigenem Wissen.
+        Antworte in vollstaendigen Saetzen.

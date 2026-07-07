@@ -1,0 +1,89 @@
+{
+  "_meta": {
+    "beschreibung": "SUSI Datumsarithmetik-Test — 10 Fragen mit dynamischen Referenzen. Zeitabhängige Fragen nutzen 'referenz_template' mit Platzhaltern (siehe referenz_loader.py). Absolute Fragen (Kalenderwissen, Vergleiche) behalten 'referenzantwort'.",
+    "version": "2.0",
+    "erstellt": "2026-06-30",
+    "geaendert": "2026-07-06",
+    "hinweis": "Ausgangsfall: 'SUSI ist seit Maerz 2026 in Betrieb, wie alt ist sie?' wurde mit '10 Monate' beantwortet. Testreihe prueft ob systematisches LLM-Rechenproblem. Dynamische Referenzen werden beim Laden im grid_run per referenz_loader.rendere_frage() berechnet — damit veraltet das Testset nicht ab dem Folgetag."
+  },
+  "full_evaluation": {
+    "beschreibung": "10 Fragen — Kategorie technisch. Sechs Fragen mit dynamischer Referenz (heute-abhaengig), vier mit fester Referenz.",
+    "kategorien": {
+      "technisch": {
+        "beschreibung": "Datumsbezogene Rechenfragen: now-Monate, now-Tage/Wochen, now-Wochen-Zukunft, now-jahresuebergreifend, Kalenderwissen Vergangenheit, Kalenderwissen Zukunft, Schaltjahr, relative Begriffe, Dauer-Vergleich ohne now",
+        "fragen": [
+          {
+            "id": "datum_01",
+            "frage": "SUSI ist seit Maerz 2026 in Betrieb. Wie alt ist sie inzwischen?",
+            "referenz_template": "SUSI ist seit dem 20. Maerz 2026 in Betrieb. Bis zum heutigen Datum ({heute_kurz}) sind das {monate_seit:2026-03-20} Monate.",
+            "kategorie_test": "now minus, Einheit Monate",
+            "schwierigkeit": "mittel"
+          },
+          {
+            "id": "datum_02",
+            "frage": "Wie viele Tage sind seit dem 15. Mai 2026 bis heute vergangen?",
+            "referenz_template": "Vom 15. Mai 2026 bis heute ({heute}) sind {tage_seit:2026-05-15} Tage vergangen.",
+            "kategorie_test": "now minus, Einheit Tage",
+            "schwierigkeit": "mittel"
+          },
+          {
+            "id": "datum_03",
+            "frage": "Wenn etwas in exakt 3 Wochen ab heute abläuft, zu welchem Datum ist es dann abgelaufen?",
+            "referenz_template": "Heute ist der {heute}. In exakt 3 Wochen (21 Tage) ist das der {heute+21}.",
+            "kategorie_test": "now plus, Einheit Wochen",
+            "schwierigkeit": "mittel"
+          },
+          {
+            "id": "datum_04",
+            "frage": "Wenn ein Projekt am 1. Dezember 2025 gestartet ist, wie viele Monate laeuft es dann bis heute?",
+            "referenz_template": "Vom 1. Dezember 2025 bis heute ({heute}) sind das {monate_seit:2025-12-01} volle Monate. Der Zeitraum geht ueber den Jahreswechsel 2025/2026 hinweg.",
+            "kategorie_test": "now minus, jahresuebergreifend",
+            "schwierigkeit": "schwer"
+          },
+          {
+            "id": "datum_05",
+            "frage": "Welcher Wochentag war der 31. Dezember 1999?",
+            "referenzantwort": "Der 31. Dezember 1999 war ein Freitag.",
+            "kategorie_test": "reines Kalenderwissen, Vergangenheit",
+            "schwierigkeit": "schwer"
+          },
+          {
+            "id": "datum_06",
+            "frage": "Welcher Wochentag ist der 25. Dezember 2026?",
+            "referenzantwort": "Der 25. Dezember 2026 ist ein Freitag.",
+            "kategorie_test": "reines Kalenderwissen, Zukunft",
+            "schwierigkeit": "schwer"
+          },
+          {
+            "id": "datum_07",
+            "frage": "Wie viele Tage liegen zwischen dem 1. Februar 2024 und dem 1. Maerz 2024?",
+            "referenzantwort": "Zwischen dem 1. Februar 2024 und dem 1. Maerz 2024 liegen 29 Tage, weil 2024 ein Schaltjahr ist und der Februar 29 statt 28 Tage hat.",
+            "kategorie_test": "Schaltjahr",
+            "schwierigkeit": "schwer"
+          },
+          {
+            "id": "datum_08",
+            "frage": "Welches Datum ist uebernaechste Woche, gerechnet ab heute?",
+            "referenz_template": "Heute ist der {heute}, ein {heute_wt}. Naechste Woche waere der {heute+7}, uebernaechste Woche der {heute+14}.",
+            "kategorie_test": "relative Begriffe ohne explizite Zahl",
+            "schwierigkeit": "schwer"
+          },
+          {
+            "id": "datum_09",
+            "frage": "Was liegt laenger zurueck: ein Projektstart im Januar 2026 oder ein Projektstart im Maerz 2026?",
+            "referenzantwort": "Ein Projektstart im Januar 2026 liegt laenger zurueck als ein Projektstart im Maerz 2026, weil Januar vor Maerz im selben Jahr liegt.",
+            "kategorie_test": "Dauer-Vergleich zwischen zwei fixen Daten, ohne now",
+            "schwierigkeit": "einfach"
+          },
+          {
+            "id": "datum_10",
+            "frage": "Wie viele Wochen sind es noch bis Weihnachten 2026, gerechnet ab heute?",
+            "referenz_template": "Heute ist der {heute}, Weihnachten 2026 ist am 25. Dezember 2026. Das sind {wochen_bis:2026-12-25} Wochen.",
+            "kategorie_test": "now plus, Einheit Wochen, laengerer Zeitraum",
+            "schwierigkeit": "schwer"
+          }
+        ]
+      }
+    }
+  }
+}

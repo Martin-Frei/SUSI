@@ -52,7 +52,9 @@ from typing import Optional
 
 # Eigene Module
 SCRIPT_DIR = Path(__file__).parent
+PROJECT_ROOT = SCRIPT_DIR.parent.parent
 sys.path.insert(0, str(SCRIPT_DIR))
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from evaluator import (
     EvalResult, CSVWriter,
@@ -60,7 +62,8 @@ from evaluator import (
     berechne_bert_scores, berechne_rouge_scores, pruefe_ausweichantwort
 )
 from indexer import get_collection_name, find_config, load_config
-from auto_scorer import berechne_auto_score, zeige_auto_score
+from auto_scorer import berechne_auto_score, zeige_auto_score, DIAG_ZU_QUALITAET
+from referenz_loader import rendere_frage
 
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
 
@@ -93,6 +96,17 @@ def lade_fragen(fragen_path: str, mode: str) -> list:
     for f in fragen:
         if "referenzantwort" not in f and "referenz" in f:
             f["referenzantwort"] = f["referenz"]
+
+    # Dynamische Referenzen rendern (referenz_template → referenz/referenzantwort).
+    # Verhindert dass zeitabhaengige Testfragen ab dem Folgetag falsche
+    # Bewertungen produzieren. Fragen ohne Template bleiben unveraendert.
+    heute_iso = None
+    for f in fragen:
+        rendere_frage(f)
+        if "referenz_template" in f and heute_iso is None:
+            from datetime import date
+            heute_iso = date.today().isoformat()
+            print(f"  📅 Dynamische Referenzen gerendert (heute={heute_iso})")
 
     return fragen
 
@@ -185,6 +199,36 @@ def build_output_path(config: dict, mode: str) -> str:
 
 
 # ── RAG-Anfrage mit optionalem Reranker ──────────────────────────
+
+def live_query(question: str) -> tuple:
+    """
+    Fuehrt eine Anfrage durch die komplette Live-Pipeline:
+    detect_language() + rewrite_query() + ChromaDB + Reranker + Router + LLM.
+
+    Importiert query.py aus dem Produktionscode.
+    Gibt router_profil zusaetzlich zurueck.
+
+    Returns:
+        tuple: (antwort, dauer_sek, n_chunks, quelldateien, chunk_texte,
+                kontext_text, reranker_used, router_profil)
+    """
+    import sys
+    sys.path.insert(0, str(PROJECT_ROOT))
+    from rag.query import ask_susi_eval
+
+    result = ask_susi_eval(question=question, chat_history=[])
+
+    return (
+        result.get("answer", ""),
+        result.get("antwortzeit_sek", 0.0),
+        result.get("chunks_nach_reranking", result.get("chunks_gefunden", 0)),
+        ", ".join(result.get("quelldateien", [])),
+        [],
+        result.get("kontext_nach_reranking", ""),
+        result.get("reranker_used", False),
+        result.get("router_profil", "unbekannt")
+    )
+
 
 def rag_query(question: str, collection_name: str,
               embedding_model: str, top_k: int,
@@ -406,6 +450,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--fragen", help="Pfad zur Fragen-JSON (überschreibt config)")
     parser.add_argument("--nachbewertung", action="store_true")
+    parser.add_argument("--live", action="store_true", help="Live-Pipeline mit Router statt manuellem Profil (Lauf F)")
     args = parser.parse_args()
 
     config_path = find_config(args.config)
@@ -549,21 +594,26 @@ def main():
                     # Gecachte Reranker-Instanz holen (None wenn kein Reranker aktiv)
                     reranker_inst = reranker_cache.get(reranker_cfg.get("model")) if reranker_cfg.get("active") else None
 
-                    result_tuple = rag_query(
-                        question=frage_data["frage"],
-                        collection_name=collection_name,
-                        embedding_model=embedding["name"],
-                        top_k=top_k,
-                        algorithm=algorithm_dict["name"],
-                        score_threshold=score_threshold,
-                        llm_model=llm["name"],
-                        temperature=temperature,
-                        system_prompt=prompt_dict["text"],
-                        reranker_cfg=reranker_cfg,
-                        reranker_instance=reranker_inst,
-                        thinking=llm.get("thinking", False)
-                    )
-                    antwort, dauer, n_chunks, quellen, chunk_texte, kontext_text, reranker_used = result_tuple
+                    if args.live:
+                        result_tuple = live_query(question=frage_data["frage"])
+                        antwort, dauer, n_chunks, quellen, chunk_texte, kontext_text, reranker_used, router_profil = result_tuple
+                    else:
+                        result_tuple = rag_query(
+                            question=frage_data["frage"],
+                            collection_name=collection_name,
+                            embedding_model=embedding["name"],
+                            top_k=top_k,
+                            algorithm=algorithm_dict["name"],
+                            score_threshold=score_threshold,
+                            llm_model=llm["name"],
+                            temperature=temperature,
+                            system_prompt=prompt_dict["text"],
+                            reranker_cfg=reranker_cfg,
+                            reranker_instance=reranker_inst,
+                            thinking=llm.get("thinking", False)
+                        )
+                        antwort, dauer, n_chunks, quellen, chunk_texte, kontext_text, reranker_used = result_tuple
+                        router_profil = "manuell"
                     fehler_text = ""
                     if antwort.startswith("[FEHLER]") or antwort.startswith("[LLM FEHLER]"):
                         fehler_text = antwort
@@ -611,10 +661,11 @@ def main():
                         rouge_str = ""
                         if rouge_info.get("antwort_rougeL") is not None:
                             rouge_str = (f" | ROUGE-L: {rouge_info['antwort_rougeL']:.3f}"
-                                        f" | ChunkROUGE: {rouge_info.get('max_chunk_rougeL', 0):.3f}")
-                        print(f"  📐 BERT: {bert_info['antwort_bert']:.3f} | "
-                              f"MaxChunk: {bert_info['max_chunk_bert']:.3f} | "
-                              f"Delta: {bert_info['delta']:+.3f}{rouge_str}")
+                                        f" | ChunkROUGE: {rouge_info.get('max_chunk_rougeL') or 0:.3f}")
+                        ab = bert_info.get('antwort_bert') or 0
+                        mc = bert_info.get('max_chunk_bert') or 0
+                        dl = bert_info.get('delta') or 0
+                        print(f"  📐 BERT: {ab:.3f} | MaxChunk: {mc:.3f} | Delta: {dl:+.3f}{rouge_str}")
 
                 auto_result = berechne_auto_score(
                     antwort=antwort or "",
@@ -623,7 +674,8 @@ def main():
                     delta=bert_info.get("delta"),
                     antwort_rougeL=rouge_info.get("antwort_rougeL"),
                     max_chunk_rougeL=rouge_info.get("max_chunk_rougeL"),
-                    auto_score_ausweich=ausweich
+                    auto_score_ausweich=ausweich,
+                    referenz=frage_data.get("referenzantwort", "")
                 )
 
                 score_man = None
@@ -648,10 +700,9 @@ def main():
                         return
                 elif antwort and not auto_result["manuell"]:
                     # Diagnosescore (0-5) auf Qualitaetsscore (0-2) mappen
-                    # 0=Ausweich->0, 1=Halluzination->0, 2=Training->1,
-                    # 3=RAG korrekt->2, 4=Generation->0, 5=FalscherChunk->0
-                    _mapping = {0: 0, 1: 0, 2: 1, 3: 2, 4: 0, 5: 0}
-                    score_man = _mapping.get(auto_result["score"])
+                    # Zentrale Konstante aus auto_scorer.py (Single Source
+                    # of Truth) statt lokal dupliziertem Dict.
+                    score_man = DIAG_ZU_QUALITAET.get(auto_result["score"])
 
                 if args.judge and antwort and auto_result["manuell"]:
                     judge_cfg = config.get("evaluation", {}).get("judge_model", {})
@@ -696,7 +747,9 @@ def main():
                     antwortzeit_sek=round(dauer, 2),
                     kontext_chunks=n_chunks,
                     quelldateien=quellen,
-                    fehler=fehler_text or bert_info.get("fehler", "")
+                    fehler=fehler_text or bert_info.get("fehler", ""),
+                    router_profil=router_profil,
+                    router_korrekt=(router_profil == kategorie) if args.live else None
                 )
                 writer.write(result)
 
