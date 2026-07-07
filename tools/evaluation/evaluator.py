@@ -102,6 +102,8 @@ class EvalResult:
     referenzantwort: str
     generierte_antwort: str
     thinking: bool = False
+    router_profil: str = "manuell"
+    router_korrekt: Optional[bool] = None
     kontext_text: str = ""          # tatsächliche Chunks für manuelle Inspektion
 
     # Scores
@@ -171,7 +173,7 @@ class CSVWriter:
         "run_id", "timestamp",
         "embedding_model", "chunk_size", "overlap", "separator",
         "top_k", "algorithm", "score_threshold",
-        "llm_model", "thinking", "temperature", "system_prompt_name",
+        "llm_model", "thinking", "temperature", "system_prompt_name", "router_profil", "router_korrekt",
         "frage_id", "kategorie", "frage",
         "referenzantwort", "generierte_antwort", "kontext_text",
         "auto_score", "score_manuell", "score_judge",

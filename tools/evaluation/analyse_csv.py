@@ -389,12 +389,22 @@ def main():
     analysiere_parameter(daten, "system_prompt_name", "System-Prompt")
     analysiere_parameter(daten, "llm_model", "LLM-Modell")
     analysiere_parameter(daten, "thinking", "Thinking-Modus")
+    analysiere_parameter(daten, "router_profil", "Router-Profil")
     analysiere_parameter(daten, "temperature", "Temperature")
     analysiere_kategorie(daten)
     kreuztabelle(daten, "embedding_model", "chunk_size", "Embedding × Chunk-Size")
     kreuztabelle(daten, "embedding_model", "system_prompt_name", "Embedding × Prompt")
     kreuztabelle(daten, "llm_model", "chunk_size", "LLM × Chunk-Size")
     kreuztabelle(daten, "llm_model", "thinking", "LLM × Thinking")
+    kreuztabelle(daten, "router_profil", "kategorie", "Router-Profil × Kategorie")
+
+    # Router-Accuracy (nur wenn router_korrekt Spalte vorhanden)
+    router_zeilen = [z for z in daten if z.get("router_korrekt", "").strip() not in ("", "None")]
+    if router_zeilen:
+        korrekt = sum(1 for z in router_zeilen if z.get("router_korrekt") == "True")
+        print(f"{'='*70}")
+        print(f"🧭 Router-Accuracy: {korrekt}/{len(router_zeilen)} ({korrekt/len(router_zeilen)*100:.1f}%)")
+        print(f"{'='*70}")
 
     if args.korrektur:
         finde_verdaechtige_nullen(daten)
