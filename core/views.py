@@ -44,6 +44,39 @@ def _get_or_create_chat(request) -> Chat:
     return chat
 
 
+# ── Manuell-Modus: Settings-Helper ─────────────────────────────────
+# Zentrale Stelle für die Default-Logik — nicht in den Views duplizieren
+# (Lektion vom dreifach duplizierten Mapping-Dict in der Eval-Pipeline).
+
+def _config_defaults() -> dict:
+    """Manuell-Defaults aus der Config — greift wenn ein Chat noch
+    keine eigenen manuell_settings hat."""
+    return {
+        "llm_model":     cfg["generation"]["llm_model"],
+        "top_k":         cfg["retrieval"]["top_k"],
+        "temperature":   cfg["generation"]["temperature"],
+        "num_ctx":       cfg["generation"]["num_ctx"],
+        "system_prompt": cfg["generation"]["system_prompt"],
+        "algorithm":     cfg["retrieval"]["algorithm"],
+        "thinking":      False,
+    }
+
+
+def _get_manuell_settings(chat: Chat) -> dict:
+    """Manuell-Werte des Chats, aufgefüllt mit Config-Defaults für
+    fehlende Keys. Chat ohne eigene Werte → reine Defaults."""
+    defaults = _config_defaults()
+    if chat.manuell_settings:
+        defaults.update(chat.manuell_settings)
+    return defaults
+
+
+def _thinking_faehige_modelle() -> set:
+    """Namen der Modelle die laut Config den Thinking-Modus können."""
+    return {m["name"] for m in cfg.get("available_models", [])
+            if m.get("thinking", False)}
+
+
 def chat_view(request):
     """Hauptseite — Chat mit SUSI"""
     chat      = _get_or_create_chat(request)
@@ -53,27 +86,48 @@ def chat_view(request):
     # Alle Chats für die Sidebar-Liste (neueste zuerst)
     all_chats = Chat.objects.all()
 
+    # Slider zeigen die Manuell-Werte DIESES Chats (oder Config-Defaults
+    # wenn der Chat noch keine hat) — nicht mehr die rohe Config.
+    ms = _get_manuell_settings(chat)
+
     return render(request, "core/chat.html", {
-        "chat":            chat,
-        "messages":        messages,
-        "all_chats":       all_chats,
-        "chat_mode":       chat_mode,
-        "modes":           [("AUTO", "AUTO"), ("MANUELL", "MANUELL"), ("CODING", "CODING")],
-        "llm_model":       cfg["generation"]["llm_model"],
-        "embedding_model": cfg["retrieval"]["embedding_model"],
-        "top_k":           cfg["retrieval"]["top_k"],
-        "num_ctx":         cfg["generation"]["num_ctx"],
-        "algorithm":       cfg["retrieval"]["algorithm"],
-        "temperature":     cfg["generation"]["temperature"],
-        "system_prompt":   cfg["generation"]["system_prompt"],
+        "chat":             chat,
+        "messages":         messages,
+        "all_chats":        all_chats,
+        "chat_mode":        chat_mode,
+        "modes":            [("AUTO", "AUTO"), ("MANUELL", "MANUELL"), ("CODING", "CODING")],
+        "llm_model":        ms["llm_model"],
+        "embedding_model":  cfg["retrieval"]["embedding_model"],
+        "top_k":            ms["top_k"],
+        "num_ctx":          ms["num_ctx"],
+        "algorithm":        ms["algorithm"],
+        "temperature":      ms["temperature"],
+        "system_prompt":    ms["system_prompt"],
+        "thinking":         ms["thinking"],
+        "available_models": cfg.get("available_models", []),
     })
 
 
 @require_POST
 def new_chat_view(request):
-    """HTMX-Endpunkt — Neuen Chat anlegen und aktivieren"""
+    """HTMX-Endpunkt — Neuen Chat anlegen und aktivieren.
+
+    Vererbung: der neue Chat übernimmt die manuell_settings des bisher
+    aktiven Chats. So muss der User nicht bei jedem neuen Chat die
+    Slider neu einstellen — ab dann lebt jeder Chat eigenständig."""
     chat_mode = request.session.get("chat_mode", "AUTO")
-    chat = Chat.objects.create(mode=chat_mode)
+
+    # Manuell-Werte vom bisher aktiven Chat erben (falls vorhanden)
+    geerbte_settings = None
+    alte_chat_id = request.session.get("active_chat_id")
+    if alte_chat_id:
+        try:
+            alter_chat = Chat.objects.get(id=alte_chat_id)
+            geerbte_settings = alter_chat.manuell_settings
+        except Chat.DoesNotExist:
+            pass
+
+    chat = Chat.objects.create(mode=chat_mode, manuell_settings=geerbte_settings)
     request.session["active_chat_id"] = str(chat.id)
     request.session.modified = True
 
@@ -132,7 +186,11 @@ def ask_view(request):
     )
 
     # ── SUSI fragen ───────────────────────────────────────────────
-    result = ask_susi(question, chat_history=chat_history, mode=chat_mode)
+    # Im MANUELL-Modus: die Chat-eigenen Einstellungen als Overrides
+    # mitgeben — sie umgehen in ask_susi() den Router.
+    overrides = _get_manuell_settings(chat) if chat_mode == "MANUELL" else None
+    result = ask_susi(question, chat_history=chat_history, mode=chat_mode,
+                      overrides=overrides)
 
     # ── SUSI-Antwort mit allen Metadaten in DB speichern ──────────
     susi_msg = Message.objects.create(
@@ -181,22 +239,51 @@ def ask_view(request):
 
 @require_POST
 def settings_view(request):
-    """HTMX-Endpunkt — Config-Parameter zur Laufzeit ändern"""
-    global cfg
+    """HTMX-Endpunkt — Manuell-Einstellungen des aktiven Chats ändern.
 
-    llm_model = request.POST.get("llm_model")
-    top_k     = request.POST.get("top_k")
-    num_ctx   = request.POST.get("num_ctx")
+    UMBAU 07.07.2026: Schreibt in chat.manuell_settings (DB) statt in
+    die susi_config.yaml. Die Config bleibt damit unangetastete Single
+    Source of Truth für Defaults und den AUTO-Modus — vorher hat jeder
+    Slider-Klick die Produktions-Config für ALLE Modi umgeschrieben.
+
+    Nimmt alle Manuell-Felder an: llm_model, top_k, temperature,
+    num_ctx, system_prompt, algorithm, thinking."""
+    chat = _get_or_create_chat(request)
+    ms = _get_manuell_settings(chat)  # bestehende Werte + Defaults
+
+    llm_model     = request.POST.get("llm_model")
+    top_k         = request.POST.get("top_k")
+    temperature   = request.POST.get("temperature")
+    num_ctx       = request.POST.get("num_ctx")
+    system_prompt = request.POST.get("system_prompt")
+    algorithm     = request.POST.get("algorithm")
+    thinking      = request.POST.get("thinking")
 
     if llm_model:
-        cfg["generation"]["llm_model"] = llm_model
+        ms["llm_model"] = llm_model
+        # Thinking zurücksetzen wenn das neue Modell es nicht kann —
+        # verhindert dass ein qwen3-Thinking-Flag an llama3.1 klebt.
+        if llm_model not in _thinking_faehige_modelle():
+            ms["thinking"] = False
     if top_k:
-        cfg["retrieval"]["top_k"] = int(top_k)
+        ms["top_k"] = int(top_k)
+    if temperature:
+        ms["temperature"] = float(temperature)
     if num_ctx:
-        cfg["generation"]["num_ctx"] = int(num_ctx)
+        ms["num_ctx"] = int(num_ctx)
+    if system_prompt:
+        ms["system_prompt"] = system_prompt
+    if algorithm:
+        ms["algorithm"] = algorithm
+    if thinking is not None and thinking != "":
+        # Thinking nur akzeptieren wenn das aktuelle Modell es kann
+        if ms["llm_model"] in _thinking_faehige_modelle():
+            ms["thinking"] = (thinking == "true")
+        else:
+            ms["thinking"] = False
 
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        yaml.dump(cfg, f, allow_unicode=True)
+    chat.manuell_settings = ms
+    chat.save(update_fields=["manuell_settings"])
 
     return HttpResponse('<div class="status-msg status-msg--ok">Einstellungen gespeichert.</div>')
 

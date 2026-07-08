@@ -368,10 +368,27 @@
 
         <div class="settings-param-label">LLM</div>
         <div class="radio-group">
-          <input type="radio" name="llm_model" id="llm1" value="llama3.1:8b" {% if llm_model == "llama3.1:8b" %}checked{% endif %}>
-          <label for="llm1">llama3.1:8b</label>
-          <input type="radio" name="llm_model" id="llm2" value="qwen2.5-coder:7b" {% if llm_model == "qwen2.5-coder:7b" %}checked{% endif %}>
-          <label for="llm2">qwen2.5-coder</label>
+          {% for m in available_models %}
+          <input type="radio" name="llm_model" id="llm{{ forloop.counter }}"
+                 value="{{ m.name }}"
+                 data-thinking="{{ m.thinking|yesno:'true,false' }}"
+                 {% if llm_model == m.name %}checked{% endif %}>
+          <label for="llm{{ forloop.counter }}">{{ m.name }}</label>
+          {% endfor %}
+        </div>
+
+        <div class="settings-param-label">Thinking-Modus</div>
+        <div class="radio-group" id="thinking-group">
+          <input type="radio" name="thinking" id="think0" value="false"
+                 {% if not thinking %}checked{% endif %}>
+          <label for="think0">aus</label>
+          <input type="radio" name="thinking" id="think1" value="true"
+                 {% if thinking %}checked{% endif %}>
+          <label for="think1">an</label>
+        </div>
+        <div class="settings-hint" id="thinking-hint"
+             style="font-size:10px;color:var(--text-dim,#888);margin:-4px 0 8px 2px;">
+          nur für Thinking-fähige Modelle (qwen3)
         </div>
 
         <div class="settings-param-label">Algorithmus</div>
@@ -544,8 +561,32 @@
   document.querySelectorAll('input[name="llm_model"]').forEach(el => {
     el.addEventListener('change', () => {
       document.getElementById('badge-llm').textContent = el.value;
+      updateThinkingToggle();
     });
   });
+
+  // ── Thinking-Toggle nur für Thinking-fähige Modelle aktiv ────────
+  // Capability kommt aus data-thinking (gerendert aus available_models
+  // in der susi_config.yaml). Nicht-fähiges Modell → Toggle wird
+  // ausgegraut und auf "aus" zurückgesetzt.
+  function updateThinkingToggle() {
+    const gewaehlt = document.querySelector('input[name="llm_model"]:checked');
+    const faehig = gewaehlt && gewaehlt.dataset.thinking === 'true';
+    const group = document.getElementById('thinking-group');
+    const hint = document.getElementById('thinking-hint');
+    group.querySelectorAll('input').forEach(r => { r.disabled = !faehig; });
+    group.style.opacity = faehig ? '1' : '0.35';
+    if (hint) hint.style.display = faehig ? 'none' : 'block';
+    if (!faehig) {
+      const aus = document.getElementById('think0');
+      if (aus && !aus.checked) {
+        aus.checked = true;
+        // Server-Sync: zurückgesetztes Thinking auch speichern
+        aus.closest('form').requestSubmit();
+      }
+    }
+  }
+  updateThinkingToggle();
 
   document.querySelectorAll('input[name="num_ctx"]').forEach(el => {
     el.addEventListener('change', () => {

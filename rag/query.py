@@ -235,7 +235,8 @@ Umgeschrieben:"""
 
 
 # ── Kern-Funktion ─────────────────────────────────────────────────
-def ask_susi(question, chat_history: list | None = None, mode: str = "auto"):
+def ask_susi(question, chat_history: list | None = None, mode: str = "auto",
+             overrides: dict | None = None):
     """
     Stellt eine Frage an SUSI und gibt ein Dict zurück.
 
@@ -246,14 +247,19 @@ def ask_susi(question, chat_history: list | None = None, mode: str = "auto"):
                       Wird von views.py befüllt — max. letzte 2 Q/A Paare.
                       None = kein Chat-Kontext (z.B. erste Frage der Session)
         mode:         Frontend-Modus, gesetzt vom Chat-Toggle.
-                      "auto"    = Standard-Pipeline, Router aktiv, agent_datum
-                                  darf reine Kalenderfragen deterministisch
-                                  beantworten (LLM wird umgangen)
-                      "manuell" = User kontrolliert Modell/top_k/temp/num_ctx/
-                                  Prompt selbst, Router aus, kein Agent
-                      "coding"  = Ingest-Vorbereitung: SUSI verarbeitet ein
-                                  Dokument (PDF/MD/...) und bereitet den Text
-                                  für ingest.py auf, kein Agent
+                      "auto"    = Standard-Pipeline, Router aktiv
+                      "manuell" = overrides gewinnen, Router aus
+                      "coding"  = Ingest-Vorbereitung (kein Agent)
+                      agent_datum ist bei auto UND manuell aktiv —
+                      eine Kalenderfrage ist deterministisch beantwortbar
+                      egal welches LLM eingestellt ist.
+        overrides:    Manuell-Einstellungen aus dem Frontend (views.py,
+                      chat.manuell_settings). Keys: llm_model, top_k,
+                      temperature, num_ctx, system_prompt (Name!),
+                      algorithm, thinking. Wenn gesetzt: Router wird
+                      übersprungen, diese Werte gewinnen.
+                      system_prompt wird über cfg["system_prompts"]
+                      vom Namen auf den Prompt-Text aufgelöst.
 
     Returns:
         {
@@ -273,6 +279,10 @@ def ask_susi(question, chat_history: list | None = None, mode: str = "auto"):
         }
     """
     now = get_time()
+
+    # Mode normalisieren — das Frontend sendet "AUTO"/"MANUELL"/"CODING"
+    # (Großbuchstaben aus set_mode_view), intern arbeiten wir lowercase.
+    mode = (mode or "auto").lower()
 
     # Config frisch laden (damit Frontend-Änderungen sofort wirken)
     cfg = load_config()
@@ -294,20 +304,41 @@ def ask_susi(question, chat_history: list | None = None, mode: str = "auto"):
     query_rewrite   = cfg.get("query_rewriting", {}).get("active", True)
     router_profil   = "fallback"
 
-    # 0. Sprache erkennen + Query Rewriting — vor dem Retrieval
+    # ── MANUELL-Modus: Overrides anwenden (07.07.2026) ────────────
+    # Wenn views.py Overrides mitgibt (chat.manuell_settings), gewinnen
+    # diese über die Config-Fallbacks und der Router wird deaktiviert.
+    # Früh angewendet damit auch detect_language und rewrite_query das
+    # gewählte Modell nutzen — der User hat es bewusst eingestellt.
+    # system_prompt kommt als NAME an und wird hier auf den Text aufgelöst.
+    if overrides:
+        llm_model   = overrides.get("llm_model", llm_model)
+        top_k       = int(overrides.get("top_k", top_k))
+        temperature = float(overrides.get("temperature", temperature))
+        num_ctx     = int(overrides.get("num_ctx", num_ctx))
+        algorithm   = overrides.get("algorithm", algorithm)
+        thinking    = bool(overrides.get("thinking", False))
+        override_prompt_name = overrides.get("system_prompt")
+        if override_prompt_name and override_prompt_name in cfg["system_prompts"]:
+            system_prompt = cfg["system_prompts"][override_prompt_name]
+        router_active = False
+        router_profil = "manuell"
+        print(f"  🎛️  MANUELL: {llm_model} | k={top_k} | t={temperature} "
+              f"| ctx={num_ctx} | thinking={thinking}")
+
+    # 0. Sprache erkennen — vor Agent, Rewriter und Retrieval.
     # Sprache wird VOR dem Rewriter erkannt damit der Rewriter nicht übersetzt.
     # Beispiel: "What is X?" → detect_language() → "en" → Rewriter schreibt auf Englisch um
-    # chat_history ermöglicht Folgefragen korrekt aufzulösen
     lang = detect_language(question, llm_model, keep_alive)
 
     # 0a. agent_datum — SUSIs erstes Werkzeug im Sinne von Tool Use.
     # Reine Kalenderfragen (Wochentag, Tage/Wochen zwischen zwei Daten,
     # N Tage/Wochen ab heute) werden deterministisch per Python datetime
     # beantwortet — kein LLM, kein Retrieval, keine Halluzination.
-    # Konservativ: nur im auto-Modus und nur wenn Deutsch erkannt wurde.
-    # Manuell = User will Kontrolle. Coding = Ingest-Vorbereitung.
+    # Aktiv bei auto UND manuell (07.07.): eine Kalenderfrage ist
+    # deterministisch beantwortbar egal welches LLM eingestellt ist.
+    # Coding = Ingest-Vorbereitung, dort kein Agent.
     # Details zur Klassifikation siehe rag/agent_datum.py.
-    if mode == "auto" and lang == "de" and agent_datum.ist_kalenderfrage(question):
+    if mode in ("auto", "manuell") and lang == "de" and agent_datum.ist_kalenderfrage(question):
         agent_start = time.time()
         agent_antwort = agent_datum.beantworte_kalenderfrage(question)
         agent_wall = round(time.time() - agent_start, 3)

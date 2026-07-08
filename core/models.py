@@ -40,6 +40,16 @@ class Chat(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # ── Manuell-Modus Einstellungen (pro Chat, mit Vererbung) ─────
+    # JSON-Dict mit den Overrides für den MANUELL-Modus:
+    #   {"llm_model": str, "top_k": int, "temperature": float,
+    #    "num_ctx": int, "system_prompt": str, "algorithm": str,
+    #    "thinking": bool}
+    # null = Chat hat noch keine eigenen Werte → Config-Defaults greifen.
+    # Neue Chats erben die Werte des zuletzt aktiven Chats (new_chat_view).
+    # Geschrieben von settings_view, gelesen von ask_view/chat_view.
+    manuell_settings = models.JSONField(null=True, blank=True)
+
     class Meta:
         ordering = ["-updated_at"]
 
