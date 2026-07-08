@@ -41,6 +41,12 @@ SUSI folgt dem klassischen RAG-Prinzip (Retrieval-Augmented Generation) — aber
 ```
 Frage des Nutzers
        ↓
+Spracherkennung (ISO 639-1, deterministisch)
+       ↓
+agent_datum: Reine Kalenderfrage?
+  ├─ Ja → Python datetime, ~1ms, kein LLM
+  └─ Nein → normale Pipeline
+       ↓
 Query Rewriting löst Ich-Form und Folgefragen auf
        ↓
 Embedding-Modell wandelt Frage in Vektor um
@@ -151,33 +157,36 @@ Die Architektur ist nicht nur für den persönlichen Einsatz gedacht. Lokale, DS
 
 ---
 
-## Fünf Kernerkenntnisse
+## Sieben Kernerkenntnisse
 
 1. **Die Wissensbasis ist das Asset** — nicht das Modell. Wer SUSIpedia besitzt ist unabhängig von Modell-Updates und Anbieter-Entscheidungen.
 2. **Dokumentqualität schlägt Modellgröße** — ausformulierte Sätze retrievieren besser als kompakte Listen, egal wie gut das Embedding-Modell ist.
 3. **Retrieval vor Generation messen** — was das Retrieval nicht findet kann kein Prompt reparieren. Erst die Retrieval-Ebene verstehen, dann optimieren.
 4. **Human-in-the-Loop ist kein Kompromiss** — es ist das richtige Designprinzip für ein System das dauerhaft zuverlässig bleiben soll.
 5. **Einfachheit ist eine Architekturentscheidung** — ein Modell das gut funktioniert schlägt drei Agenten die sich gegenseitig stören.
+6. **Language ≠ Computation** — LLMs sollen routen und generieren, nicht rechnen. Für Datum, Alter und Differenzen ist ein deterministisches Tool immer überlegen.
+7. **Similarity-Metriken messen Ähnlichkeit, nicht Korrektheit** — BERTScore und ROUGE-L erkennen nicht ob eine Zahl falsch ist. Numerisch präzise Domänen brauchen deterministischen Pre-Check.
 
 ---
 
 
-## Produktivbetrieb (Juni 2026)
+## Produktivbetrieb (Juni – Juli 2026)
 
-Seit Abschluss der Evaluierungsphase ist SUSI in den Produktivbetrieb übergegangen. 
-Die wichtigsten Neuerungen:
+Seit Abschluss der Evaluierungsphase ist SUSI in den Produktivbetrieb übergegangen und wird aktiv weiterentwickelt. Die wichtigsten Komponenten:
 
 - **Router:** Retrieval-getriebenes Profil-System mit 5 Kategorien (susi, projekte, lernen, persoenlich, technik)
 - **Reranker:** bge-reranker-v2-m3 (97% Korrektheit) nach Evolution über drei Modell-Generationen
-- **Query Rewriting:** LLM-basiertes Umschreiben von Ich-Form und Folgefragen vor dem Retrieval
+- **Query Rewriting:** LLM-basiertes Umschreiben von Ich-Form und Folgefragen vor dem Retrieval; Fachbegriffe werden nicht übersetzt
 - **Lauf C:** 5.860 Runs bestätigen — Parameter-Unterschiede sind minimal, Dokumentqualität ist der größte Hebel
+- **Tool Use:** `agent_datum` löst Kalender-Fragen deterministisch in ~1ms, kein LLM, keine Halluzination
+- **Chat-History:** SQLite-Persistenz mit HitL-Queue-Button seit 25.06.2026
+- **Läufe D/E/F:** Router-Tracking, qwen3-Thinking-Test (kein Vorteil), doppeltes Rewriting gefunden und gefixt
 
 → *Vollständige Dokumentation: [susi_08_Produktivbetrieb.md](susi_08_produktivbetrieb.md)*
 
 
 ---
 
-*Stand: Juni 2026 — Dokument wird laufend aktualisiert*  
+*Stand: Juli 2026 — Dokument wird laufend aktualisiert*  
 *Martin Freimuth · github.com/Martin-Frei*  
 *Stack: Python · Django · HTMX · LangChain · ChromaDB · Ollama · bge-reranker-v2-m3*
-

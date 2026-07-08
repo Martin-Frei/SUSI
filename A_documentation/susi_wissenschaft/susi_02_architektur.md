@@ -1,5 +1,5 @@
 # 02 — Systemarchitektur
-### SUSI Entwicklungsbericht · Stand Juni 2026
+### SUSI Entwicklungsbericht · Stand Juli 2026
 
 ---
 
@@ -10,6 +10,12 @@ SUSI folgt dem RAG-Prinzip (Retrieval-Augmented Generation). Das Grundprinzip ha
 ```
 Frage des Nutzers
        ↓
+detect_language()                                    [lokal, LLM, num_ctx=128]
+       ↓
+agent_datum Guard: Reine Kalenderfrage?              [lokal, deterministisch]
+  ├─ Ja (mode=auto|manuell, lang=de) → Python datetime → Antwort ~1ms
+  └─ Nein → normale Pipeline weiter
+       ↓
 Query Rewriting löst Ich-Form und Folgefragen auf   [lokal, LLM]
        ↓
 Embedding-Modell wandelt Frage in Vektor um         [lokal]
@@ -18,7 +24,7 @@ ChromaDB sucht die ähnlichsten Wissens-Chunks       [lokal]
        ↓
 Reranker (bge-reranker-v2-m3) sortiert Top 3        [lokal, CPU]
        ↓
-Router: Reranker-gewichtetes Voting → Profil         [lokal]
+Router: Reranker-Score-Summe pro Kategorie → Profil  [lokal]
        ↓
 Kontext + Original-Frage + System-Prompt
        ↓
@@ -131,30 +137,21 @@ bge-m3 gilt als stärkster Allrounder mit besserer deutscher Sprachverarbeitung.
 
 **Stand April 2026:** Wechsel zu `qwen2.5-coder:7b` — präziser bei technischen Inhalten, weniger Halluzinationen bei strukturierten Antworten. Außerdem ein konkretes Problem mit Mistral: das Modell wechselte trotz expliziter Prompt-Anweisung bei längeren Antworten zur Höflichkeitsform ("Sie" statt "du"). Prompt-Verschärfung half, löste das Problem aber nicht dauerhaft.
 
-**Stand Evaluation (Mai/Juni 2026):** qwen2.5-coder:7b, llama3.1:8b, gemma2:9b, mistral-nemo:12b werden verglichen.
+**Stand Evaluation (Mai/Juni 2026):** qwen2.5-coder:7b und llama3.1:8b wurden verglichen. `gemma2:9b` und `mistral-nemo:12b` wurden in frühen Plänen erwähnt aber nie formal evaluiert.
 
-→ *Optimales Modell nach Grid-Lauf — siehe [susi_04_evaluation.md](susi_04_evaluation.md)*
+**Stand Produktivbetrieb (Juli 2026):** `qwen2.5-coder:7b` ist primäres Modell (Fakten, Code, alle Profile außer lernen und persoenlich). `llama3.1:8b` für Profil `lernen`. `qwen2.5:7b` für Profil `persoenlich` (multilingual). `qwen3:8b` und `qwen3:14b` getestet in Lauf E — kein signifikanter Vorteil gegenüber qwen2.5-coder:7b.
+
+→ *Details: [susi_04_evaluation.md](susi_04_evaluation.md), [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
 
 ---
 
-## System-Prompt — was fest steht
+## System-Prompt — profilspezifisch via Config
 
-Der aktuelle System-Prompt in `query.py` definiert SUSIs Verhalten:
+Der System-Prompt ist nicht mehr hardcodiert in `query.py`. Alle Prompts sind in `rag/susi_config.yaml` als benannte Varianten definiert und werden profilabhängig geladen. Das aktive Profil bestimmt welcher Prompt verwendet wird — `praezise_neu` für susi/projekte/technik, `praezise_hybrid` für persoenlich und als Fallback.
 
-```
-Du bist SUSI, Martins persönliche KI-Assistentin.
-Sprich Martin IMMER mit "du" an!
+`praezise_hybrid` ist die ausgewogenste Variante: zuerst den Kontext prüfen, bei fehlenden Informationen auf eigenes LLM-Wissen zurückgreifen mit dem Hinweis `[Basierend auf meinem allgemeinen Wissen...]`. Das vermeidet zu viele "Dazu habe ich nichts"-Antworten ohne unkontrolliert zu halluzinieren.
 
-VORGEHEN:
-1. Lies den Kontext vollständig.
-2. Prüfe ob die Antwort im Kontext steht.
-3. Wenn JA: Antworte basierend auf dem Kontext.
-4. Wenn NEIN: Nutze dein eigenes Wissen.
-5. Bei persönlichen Fragen über Martin NUR den Kontext nutzen!
-   Wenn nicht im Kontext: "Dazu fehlt mir noch was in der SUSIpedia!"
-```
-
-Der Prompt hat sich mehrfach verändert. Eine auskommentierte strengere Variante in `query.py` zeigt einen verworfenen Ansatz: absolute Kontextbindung ohne Fallback auf Modellwissen. In der Praxis führte das zu zu vielen "Dazu habe ich nichts" Antworten auch bei Fragen die das Modell aus eigenem Wissen beantworten könnte.
+Die Sprachinstruktion (`lang_instruction`) wird dynamisch generiert und erscheint direkt vor "Antwort:" im Prompt — nicht am Anfang. Diese Positionierung ist wichtig: LLMs respektieren die Sprachanweisung zuverlässiger wenn sie unmittelbar vor der Generierung steht.
 
 ---
 ## Neue Pipeline-Stufen *(Produktivbetrieb Juni 2026)*
@@ -217,9 +214,7 @@ nicht durch Gradientenabstieg. Das Problem: das System schreibt eigene Halluzina
 ins Langzeitgedächtnis zurück. Eine zerstörerische Feedback-Schleife, die erst durch 
 formale Evaluation sichtbar wurde.
 
-**Aktueller Status:** Die Pipeline wurde im Mai 2026 deaktiviert. Die neue 3-stufige 
-Architektur mit Human-in-the-Loop ist in Planung (Q3 2026). Das Fundament steht mit 
-bge-reranker-v2-m3 (97% Korrektheit) bereits im Produktivbetrieb.
+**Aktueller Status:** Die Pipeline wurde im Mai 2026 deaktiviert. Der Code bleibt nach dem Prinzip "kein Abriss ohne Ersatz" in `query.py` erhalten. Das Fundament der neuen 3-stufigen Architektur steht: bge-reranker-v2-m3 (97% Korrektheit) produktiv, SQLite-Persistenz mit `Chat`, `Message` und `QueueItem` seit 25.06.2026 aktiv, HitL-Queue-Button an jeder Antwort. Asynchroner Worker und `!save`-Kommando folgen in Q3 2026.
 
 → *Vollständige Analyse: [susi_05_sackgassen.md](susi_05_sackgassen.md)*  
 → *Reranker-Evolution: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
@@ -306,7 +301,7 @@ LoRA ist kein neues Konzept — es taucht in der Literatur regelmäßig auf. Der
 
 ---
 
-## Aktuelle Architektur auf einen Blick *(Stand Juni 2026)*
+## Aktuelle Architektur auf einen Blick *(Stand Juli 2026)*
 
 | Komponente | |
 |------------|-----------------|
@@ -316,14 +311,20 @@ LoRA ist kein neues Konzept — es taucht in der Literatur regelmäßig auf. Der
 | Retrieval | similarity |
 | Reranker | BAAI/bge-reranker-v2-m3 (CPU, 97%) |
 | Router | Retrieval-getrieben, 5 Profile |
-| Query Rewriting | aktiv (Ich-Form + Folgefragen) |
-| LLM | qwen2.5-coder:7b + llama3.1:8b (profilabhängig) |
+| Language Detection | aktiv (ISO 639-1, num_ctx=128) |
+| Query Rewriting | aktiv (Ich-Form, Folgefragen, keine Übersetzung Fachbegriffe) |
+| Tool Use | agent_datum (Kalender-Guard, ~1ms, kein LLM) |
+| LLM primär | qwen2.5-coder:7b (susi, projekte, technik) |
+| LLM sekundär | llama3.1:8b (lernen) |
+| LLM multilingual | qwen2.5:7b (persoenlich, Fallback) |
+| Modus | AUTO / MANUELL / CODING Toggle |
 | Config | susi_config.yaml (Single Source of Truth) |
-| Auto-Save | deaktiviert (Mai 2026) — HitL Queue Q3 2026 |
+| Chat-History | SQLite (Chat, Message, QueueItem) seit 25.06.2026 |
+| Auto-Save | deaktiviert (Mai 2026) — HitL-Button aktiv, async Worker Q3 2026 |
 
 ---
 
 *→ Zurück zur Übersicht: [susi_00_Übersicht.md](susi_00_übersicht.md)*  
 → *Weiter: [susi_03_susipedia.md](susi_03_susipedia.md)*  
 → *Produktivbetrieb: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*  
-*Stand: Juni 2026 · Martin Freimuth*
+*Stand: Juli 2026 · Martin Freimuth*

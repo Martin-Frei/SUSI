@@ -1,5 +1,5 @@
 # 04 — Evaluation
-### SUSI Entwicklungsbericht · Stand Juni 2026
+### SUSI Entwicklungsbericht · Stand Juli 2026
 
 ---
 
@@ -501,52 +501,106 @@ durch bessere Topic-Label Ankersätze in den SUSI-eigenen Dokumentationsdateien.
 
 → *Details: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
 
-## Lauf D — Router + qwen3 *(geplant)*
+## Lauf D — Router-Tracking *(24.06.2026)*
 
-Nachdem Lauf C gezeigt hat, dass Parameter-Unterschiede minimal sind, verschiebt 
-sich der Fokus: Nicht mehr die beste Parameter-Kombination wird gesucht, sondern 
-die Qualität der neuen Produktiv-Komponenten wird gemessen.
+Nachdem Lauf C gezeigt hat dass Parameter-Unterschiede minimal sind, verschiebt sich der Fokus: die Qualität der neuen Produktiv-Komponenten wird gemessen, nicht mehr die beste Parameter-Kombination gesucht.
 
-**Was getestet wird:**
+`evaluator.py` und `analyse_csv.py` wurden um die Spalten `router_profil` und `router_korrekt` erweitert. Jeder Evaluierungslauf protokolliert jetzt welches Profil der Router gewählt hat und ob das mit der erwarteten Gold-Standard-Zuordnung übereinstimmt.
 
-- **Router-Qualität:** Wählt der Retrieval-getriebene Router das richtige Profil? 
-  Validierung gegen manuelle Gold-Standard-Zuordnung pro Frage
-- **qwen3-Vergleich:** qwen2.5-coder:7b vs. qwen3:14b vs. qwen3.5:9b, 
-  jeweils 30–50 Fragen pro Kategorie
-- **Thinking Mode:** Auswirkung von thinking on/off auf Antwortqualität 
-  (qwen3-spezifisch)
-- **susi-Kategorie:** Gezielte Miss-Analyse der schwächsten Kategorie (98%)
-
-**Umfang:** Kein Grid-Lauf — 100–150 gezielte Fragen, 4–6 Konfigurationen. 
-Die Ergebnisse fließen direkt in die Router-Profile ein.
-
-**Neu gegenüber Lauf C:** Der Router ist aktive Komponente, nicht nur 
-Parameter-Vergleich. Query Rewriting ist aktiv. qwen3 bringt Thinking Mode 
-als neue Variable.
+**Ergebnis:** Router-Accuracy stabil bei ~70%. Die Kategorie `technisch` ist mit 60% die strukturell schwächste — hier ist der inhaltliche Ausbau von `docs/technik/` der direkte Hebel.
 
 ---
 
-## Offene Fragen *(Stand Juni 2026)*
+## Lauf E — qwen3 Thinking-Test *(27.06.2026)*
 
-Die bisherigen Läufe haben die Konfiguration deutlich verbessert — aber mehrere Fragen sind noch offen:
+293 Fragen × 2 Konfigurationen: `qwen3:8b` mit `thinking=true` vs. `thinking=false`.
 
-**MMR vs. similarity:** In Lauf C getestet — MMR (Ø 2.99) minimal schlechter als similarity 
-(Ø 3.01). Die Unterschiede sind statistisch irrelevant. → siehe Kapitel 08.
+**Ergebnis:**
 
-**Hybrid Search:** Weiterhin offen. Die GMM-Misses deuten darauf hin dass Keyword-Suche 
-helfen würde. Entscheidung zurückgestellt bis Cross-Encoder-Effekt vollständig gemessen ist.
+| Konfiguration | Korrektheit | Ø Score |
+|---|---|---|
+| qwen3:8b thinking=off | 96.9% | — |
+| qwen3:8b thinking=on | 96.9% | — |
+| qwen2.5-coder:7b (Lauf C) | 97.1% | 3.02 |
 
-**Cross-Encoder Reranker:** Gelöst durch bge-reranker-v2-m3 (97% Korrektheit). 
-Die Evolution über drei Modell-Generationen (ms-marco → amberoad → bge) ist in 
-Kapitel 08 dokumentiert.
+Unterschied thinking=on vs. off: 0.011 Punkte — statistisch irrelevant. `qwen3:8b` liegt praktisch gleichauf mit `qwen2.5-coder:7b`. Das `thinking`-Flag bringt für SUSIs Anwendungsfälle keinen messbaren Vorteil. `qwen2.5-coder:7b` bleibt primäres Produktionsmodell.
 
-**Kategorie-spezifische Optimierung:** Gelöst durch den Retrieval-getriebenen Router 
-(5 Profile, Reranker-gewichtetes Voting auf Chunk-Quellordner). 
-→ siehe Kapitel 02 und 08.
+**Kernerkenntnis:** Größere Modelle in Q4-Quantisierung schlagen kleinere Modelle in Q8 — Parameter-Anzahl schlägt Quantisierungs-Präzision. Das bestätigt SUSIs Ansatz mit quantisierten 7B-Modellen auf Consumer-Hardware.
+
+---
+
+## Lauf F — Doppeltes Rewriting gefunden *(27.06.2026)*
+
+Bei der Analyse der Lauf-E-Ergebnisse wurde ein struktureller Bug entdeckt: `ask_susi_eval()` rief intern `ask_susi()` auf. `ask_susi()` enthält selbst einen Rewriter-Aufruf. Das Ergebnis: jede Testfrage wurde zweimal umgeschrieben.
+
+**Ausmaß:** ~16 Prozentpunkte Korrektheit verloren durch doppeltes Rewriting. Nach Fix: Kategorie `technisch` mit 60% als strukturell schwächste identifiziert — nicht als Rewriting-Artefakt, sondern als inhaltliches Signal für `docs/technik/`.
+
+→ *Details: [susi_06_grenzerfahrungen.md — Grenzerfahrung 6](susi_06_grenzerfahrungen.md)*
+
+---
+
+## Datumsarithmetik-Sprint *(30.06.–06.07.2026)*
+
+### Befund (30.06.)
+
+10 Kalenderfragen getestet. Der Auto-Scorer vergab allen 10 Einträgen `auto_score=3` — obwohl 5 faktisch falsch waren. SUSI nannte falsche Wochentage und falsche Tagesdifferenzen. BERTScore und ROUGE-L erkannten die Fehler nicht.
+
+**Ursache:** Similarity-basierte Metriken können prinzipiell nicht erkennen ob eine Zahl richtig ist. "14 Tage" und "21 Tage" sind sich semantisch ähnlich — eine davon ist falsch. Das ist keine Kalibrierungs-Frage, sondern eine fundamentale Grenze der Metrik-Klasse.
+
+→ *Details: [susi_06_grenzerfahrungen.md — Grenzerfahrung 5](susi_06_grenzerfahrungen.md)*
+
+### Lösung — drei Schichten (06.07.)
+
+**Schicht 1 — ValueCheck** (`tools/evaluation/valuecheck.py`): deterministischer Pre-Check, läuft vor BERTScore und ROUGE-L. Extrahiert Zahlen, Daten und Wochentage aus Referenz und Antwort, vergleicht direkt. Findet Widerspruch → Score 0, kein weiterer Check nötig.
+
+**Schicht 2 — Referenz-Loader** (`tools/evaluation/referenz_loader.py`): dynamische Platzhalter in Testfragen (`{heute}`, `{heute+21}`, `{tage_seit:YYYY-MM-DD}`) werden beim Laden aus `date.today()` gerendert. Testsets veralten nicht mehr über Nacht.
+
+**Schicht 3 — agent_datum** (`rag/agent_datum.py`): deterministischer Tool-Use-Guard vor dem RAG-Router. Reine Kalender-Fragen werden von Python `datetime` gelöst — ~1ms statt ~8s, keine Halluzination möglich.
+
+### Ergebnis der drei Schichten
+
+```
+30.06. alter Auto-Scorer, hartcodierte Refs:  Ø 2.0  (blind grün — Fehler unsichtbar)
+06.07. + ValueCheck:                          Ø 0.20 (Fehler jetzt sichtbar)
+06.07. + dynamische Refs:                     Ø 0.40
+06.07. + agent_datum:                         Ø 2.00 (8/10 korrekt gelöst)
+```
+
+---
+
+## Auto-Scorer — Erweiterungen (06.07.)
+
+### DIAG_ZU_QUALITAET als zentrale Konstante
+
+Vorher in `grid_run.py`, `ragas_scorer.py` und `analyse_csv.py` dreifach dupliziert. Jetzt zentral in `auto_scorer.py` definiert und von `grid_run.py` importiert. Die anderen zwei folgen.
+
+### Zwei Skalen — klare Trennung
+
+Die Diagnostic Scale (0–5) erklärt *warum* eine Antwort so ist. Die Quality Scale (0–2) beantwortet *ob* sie korrekt ist für den Nutzer. Das Mapping `DIAG_ZU_QUALITAET`: 0→0, 1→0, 2→1, 3→2, 4→0, 5→0. Der Auto-Scorer schreibt nur 0 oder 2 in `score_manuell` — nie 1 automatisch.
+
+---
+
+## Offene Fragen *(Stand Juli 2026)*
+
+**MMR vs. similarity:** Gelöst in Lauf C — MMR (Ø 2.99) minimal schlechter als similarity (Ø 3.01), statistisch irrelevant. Similarity bleibt Standard.
+
+**Cross-Encoder Reranker:** Gelöst — bge-reranker-v2-m3 (97% Korrektheit) produktiv. Details: Kapitel 08.
+
+**Kategorie-spezifische Optimierung:** Gelöst durch Router mit 5 Profilen. Details: Kapitel 08.
+
+**Hybrid Search:** Weiterhin offen. GMM-Misses deuten auf Keyword-Bedarf hin. Entscheidung zurückgestellt bis Router-Accuracy weiter analysiert ist.
+
+**Router-Accuracy ~70%:** Kategorie `technisch` mit 60% am schwächsten. Inhaltlicher Ausbau `docs/technik/` ist der primäre Hebel.
+
+**agent_datum Zweig 2:** Fragen mit Entitätsbezug ("Wie alt ist SUSI?") brauchen Datum aus retrievtem Chunk + Python-Berechnung. Noch offen.
+
+**`ragas_scorer.py` Stacked-CSV-Bug:** verliert `auto_score`-Werte bei gestapelten CSVs. Fix ausstehend.
+
+**`--nachbewertung` Skala:** akzeptiert 0–2, System nutzt Diagnostic 0–5. Vereinheitlichung ausstehend.
 
 ---
 
 → *Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
 → *Weiter: [susi_05_sackgassen.md](susi_05_sackgassen.md)*  
 → *Produktivbetrieb: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*    
-*Stand: Juni 2026 · Martin Freimuth*
+*Stand: Juli 2026 · Martin Freimuth*

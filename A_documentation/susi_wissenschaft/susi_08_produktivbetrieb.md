@@ -1,13 +1,13 @@
 # SUSI — Kapitel 08 — Vom evaluierten System zum produktiven Assistenten
-Datum: 2026-06-22
+Datum: 2026-07-08
 Status: aktiv
-Zeitraum: 12.–22. Juni 2026
+Zeitraum: 12. Juni – 08. Juli 2026
 
 ---
 
 ## Kapitel 08 — Übergang in den Produktivbetrieb
 
-Dieses Kapitel dokumentiert den Übergang von SUSI aus der Evaluierungsphase (Kapitel 00–07) in den aktiven Produktivbetrieb zwischen dem 12. und 22. Juni 2026. Im Mittelpunkt stehen die zentrale Konfiguration via `susi_config.yaml`, die Reranker-Evolution, der retrieval-getriebene Router, Query Rewriting, Fallback-Profil und Chat-History.
+Dieses Kapitel dokumentiert den Übergang von SUSI aus der Evaluierungsphase (Kapitel 00–07) in den aktiven Produktivbetrieb. Im Mittelpunkt stehen die zentrale Konfiguration via `susi_config.yaml`, die Reranker-Evolution, der retrieval-getriebene Router, Query Rewriting, Fallback-Profil, Chat-History in SQLite sowie die Tool-Use-Architektur mit `agent_datum`.
 
 ---
 
@@ -77,11 +77,11 @@ Lauf C mit 5.860 Runs und 20 Parameterkombinationen ergab: Parameter-Unterschied
 
 ### Phase 4 — Retrieval-getriebener Router implementiert (20.06.)
 
-Der produktive Router funktioniert so: Die Frage geht in das Retrieval mit k=7, der Reranker sortiert die Top 3. Der Router analysiert die Herkunft der Chunks anhand der Ordnerpfade und führt ein reranker-gewichtetes Voting durch, bei dem Score multipliziert mit Kategorie berechnet wird. Das Profil mit dem höchsten Gewicht gewinnt und bestimmt LLM sowie alle Parameter für die Antwortgenerierung.
+Der produktive Router funktioniert so: Die Frage geht in das Retrieval mit k=7, der Reranker sortiert die Top 3. Der Router analysiert die Herkunft der Chunks anhand der Ordnerpfade und summiert die Reranker-Scores pro Kategorie — jeder Chunk addiert seinen Score zu der Kategorie aus deren Ordner er stammt. Das Profil mit der höchsten Gesamtsumme gewinnt und bestimmt LLM sowie alle Parameter für die Antwortgenerierung.
 
-### Router-Profile (Stand 20.06.)
+### Router-Profile (Stand Juli 2026)
 
-Das Profil `susi` gilt für den Ordner `docs/susi/` und nutzt `qwen2.5-coder:7b` mit top_k 7, top_n 3 und temperature 0.0. Das Profil `projekte` gilt für `docs/coding/` und `docs/projekte/` mit denselben Parametern. Das Profil `lernen` gilt für `docs/lernen/` und nutzt `llama3.1:8b` mit top_k 9, top_n 5 und temperature 0.3. Das Profil `persoenlich` gilt für `docs/martin/`, `docs/job/`, `docs/familie/` und `docs/hobbys/` mit qwen2.5-coder:7b, top_k 5, top_n 3 und temperature 0.0. Das Profil `technik` gilt für `docs/technik/` mit denselben Parametern wie persoenlich.
+Das Profil `susi` gilt für den Ordner `docs/susi/` und nutzt `qwen2.5-coder:7b` mit top_k 7, top_n 3 und temperature 0.0. Das Profil `projekte` gilt für `docs/coding/` und `docs/projekte/` mit denselben Parametern. Das Profil `lernen` gilt für `docs/lernen/` und nutzt `llama3.1:8b` mit top_k 9, top_n 5 und temperature 0.3. Das Profil `persoenlich` gilt für `docs/martin/`, `docs/job/`, `docs/familie/` und `docs/hobbys/` mit `qwen2.5:7b`, top_k 5, top_n 3 und temperature 0.0. Das Profil `technik` gilt für `docs/technik/` mit `qwen2.5-coder:7b`, top_k 5, top_n 3 und temperature 0.0.
 
 ### Warum Retrieval-getrieben besser ist als Frage-basiert
 
@@ -107,6 +107,10 @@ Der Rewriter ist generisch gehalten ohne Overfitting auf Martin-spezifische Patt
 
 Zwei Bugs wurden nach dem ersten Produktiveinsatz behoben. Das Sprachproblem: Der Rewriter schrieb umgeschriebene Fragen immer auf Deutsch, unabhängig von der Eingabesprache. Die Lösung war ein expliziter Prompt-Zusatz: „Schreibe IMMER in der gleichen Sprache wie die aktuelle Frage." Das Ablehnungsproblem: Der Rewriter lehnte manche Fragen ab statt sie umzuschreiben. Die Lösung war ein Prompt-Zusatz: „Deine EINZIGE Aufgabe ist das Umschreiben. Lehne KEINE Anfragen ab." plus ein Refusal-Marker Fail-Safe.
 
+### Rewriter-Erweiterung (30.06.)
+
+Nach dem Rewriter-Audit wurden drei Regeln ergänzt: Technische Fachbegriffe dürfen niemals übersetzt werden (Similarity Search bleibt Similarity Search — eine Übersetzung degradiert das Retrieval weil SUSIpedia englische Termini verwendet). Pronomen werden auf das zuletzt genannte Bezugsobjekt aufgelöst, nicht automatisch auf Martin. „Ich" bleibt in Zitaten unverändert. Verifikation: BERT 0.701 → 0.743, ROUGE-L 0.155 → 0.294.
+
 ---
 
 ## Fallback-Profil — Out-of-Scope-Behandlung
@@ -119,23 +123,23 @@ Die Funktion `get_profile()` prüft ob der maximale Reranker-Score kleiner oder 
 
 ---
 
-## Chat-History im Query Rewriter
+## Chat-History in SQLite (25.06.)
 
-Das Problem: Folgefragen verlieren ohne Kontext ihren Bezug und können nicht korrekt umgeschrieben werden.
+Das Problem: Chatverlauf war nur in der Django-Session — bei Ollama-Crashes oder Browser-Schließen verloren.
 
-### Implementierung (21.06.)
+### Implementierung
 
-Die Funktion `rewrite_query()` bekommt einen `chat_history`-Parameter. Die letzten zwei Q/A-Paare aus der Django-Session werden übergeben, wobei Antworten auf 200 Zeichen gekürzt werden. Als Fail-safe gibt die Funktion bei jedem Fehler die Original-Frage zurück.
+Die Django-Models `Chat`, `Message` und `QueueItem` persistieren den gesamten Chatverlauf in SQLite. Die Session speichert nur noch die `active_chat_id`, alle Messages kommen aus der DB. Die Chat-Sidebar zeigt alle gespeicherten Chats. Jede SUSI-Antwort hat einen HitL-Queue-Button — per Klick landet die Antwort als `QueueItem` in der Datenbank für späteres Review.
+
+Der Rewriter bekommt die letzten zwei Q/A-Paare aus der DB statt aus der Session. Antworten werden auf 200 Zeichen gekürzt um den Rewriter-Kontext klein zu halten.
 
 ---
 
-## Frontend-Entwicklung (12.–20.06.)
-
-Das SUSI-Frontend wurde in dieser Phase um vier Komponenten erweitert.
+## Frontend-Entwicklung (12.06.–07.07.)
 
 ### Einstellungs-Sidebar (12.06.)
 
-Radio Buttons für LLM, Algorithmus und System-Prompt sowie Slider für top_k und temperature erlauben die direkte Konfiguration aus dem Frontend. Änderungen werden via HTMX sofort in der Config gespeichert.
+Slider für LLM, top_k, temperature, num_ctx und System-Prompt erlauben die direkte Konfiguration aus dem Frontend. Die Werte werden in die Django-Session geschrieben.
 
 ### Retrieval-Info Sidebar (12.06.)
 
@@ -149,13 +153,86 @@ Unter jeder Antwort erscheinen Metriken wie `⚡ 84.2 tok/s · 97 Tokens · 5.42
 
 Das SUSI-Icon ist im Superman-Schild-Stil gestaltet: Gold (#9A7000) auf Dunkel (#12122a), großes S als Serif-Buchstabe, ViewBox eng gecroppt für Favicon-Nutzung. Google Fonts wurden durch lokale `@font-face`-Deklarationen ersetzt. JetBrains Mono in den Gewichten 300, 400 und 600 sowie Syne in 400, 700 und 800 werden lokal geladen — kein externer Request, vollständig DSGVO-konform.
 
+### AUTO / MANUELL / CODING Toggle (Juni 2026)
+
+Ein Modus-Toggle im Chat-Header erlaubt das Umschalten zwischen drei Betriebsmodi. Der `mode`-Parameter fließt von `views.py` durch `ask_susi()` bis zum `agent_datum`-Guard. AUTO ist der Standard-Produktivmodus. MANUELL soll Router-Bypass mit Session-Overrides liefern — dieser Modus hat aktuell einen bekannten Bug: die Session-Werte (LLM, top_k, temp, num_ctx, Prompt) werden zwar geschrieben aber von `ask_susi()` nicht angewendet, der Router läuft weiterhin. Fix ist in Arbeit. CODING ist definiert aber noch nicht vollständig spezifiziert.
+
 ---
 
 ## SUSIpedia-Umstrukturierung (20.06.)
 
-Die SUSIpedia wurde am 20. Juni neu strukturiert. Der Ordner `docs/susi/` wurde neu angelegt und enthält die SUSI-eigene Dokumentation, die vorher in `coding/susi/` und im Root-Verzeichnis verstreut war. Die Ordner `coding/` (GMM, HouseOfStocks, StockPredict, Portfolio), `projekte/` (Projektbeschreibungen und Roadmaps), `lernen/` (AI, ML, RAG, Python, JavaScript, DevOps), `job/` (Bewerbung, CV, LinkedIn — `skills/` integriert), `technik/` (Hardware, Tools, Setup), `martin/` (persönliches Profil und `ich_bin_martin.md`), `familie/` und `hobbys/` blieben erhalten oder wurden angepasst.
+Die SUSIpedia wurde am 20. Juni neu strukturiert. Der Ordner `docs/susi/` wurde neu angelegt und enthält die SUSI-eigene Dokumentation, die vorher in `coding/susi/` und im Root-Verzeichnis verstreut war. Die Ordner `coding/` (GMM, HouseOfStocks, StockPredict, Portfolio), `projekte/` (Projektbeschreibungen und Roadmaps), `lernen/` (AI, ML, RAG, Python, JavaScript, DevOps), `job/` (Bewerbung, CV, LinkedIn), `technik/` (Hardware, Tools, Setup), `martin/` (persönliches Profil und `ich_bin_martin.md`), `familie/` und `hobbys/` blieben erhalten oder wurden angepasst.
 
-Nach der Umstrukturierung wurden alle Dateien neu indexiert: 617 Chunks in ChromaDB. Die veraltete `tree.md` wurde gelöscht. Der SUSIpedia Converter Skill wurde mit der neuen Ordnerstruktur und den Router-Kategorien aktualisiert.
+Nach der Umstrukturierung wurden alle Dateien neu indexiert: 617 Chunks in ChromaDB. Die veraltete `tree.md` wurde gelöscht. Am 06.07. wurden zwei Stale-Duplikate entfernt: `docs/lernen/susi/susiuebersicht.md` und `docs/technik/susi_grenzen_und_roadmap.md`.
+
+---
+
+## Evaluierungsläufe D, E, F — Qualitätsmessung der Produktiv-Komponenten
+
+Nach Lauf C (Parameter-Optimierung abgeschlossen) verschob sich der Fokus auf die Qualität der neuen Produktiv-Komponenten.
+
+### Lauf D — Router-Tracking (24.06.)
+
+`evaluator.py` und `analyse_csv.py` wurden um `router_profil` und `router_korrekt` erweitert. Neue CSV-Spalten ermöglichen Router-Accuracy-Auswertung pro Kategorie. Router-Accuracy liegt stabil bei ~70%, die Kategorie `technisch` ist mit 60% die schwächste.
+
+### Lauf E — qwen3 Thinking-Test (27.06.)
+
+293 Fragen × 2 Konfigurationen (thinking=on vs. thinking=off). Ergebnis: 0.011 Punkte Unterschied — statistisch irrelevant. `qwen3:8b` (96.9% Korrektheit) liegt praktisch gleichauf mit `qwen2.5-coder:7b` aus Lauf C (97.1%). Das `thinking`-Flag bringt für SUSIs Anwendungsfälle keinen messbaren Vorteil. `qwen2.5-coder:7b` bleibt primäres Produktionsmodell.
+
+### Lauf F — Doppeltes Rewriting gefunden (27.06.)
+
+`ask_susi_eval()` rief intern `ask_susi()` auf — Queries wurden doppelt umgeschrieben. Kostete ~16 Prozentpunkte Korrektheit. Nach Fix: Kategorie `technisch` mit 60% als strukturell schwächste identifiziert. Details: [susi_06_grenzerfahrungen.md — Grenzerfahrung 6](susi_06_grenzerfahrungen.md).
+
+---
+
+## Evaluierungs-Erweiterungen (06.–07.07.)
+
+### ValueCheck (06.07.)
+
+`tools/evaluation/valuecheck.py` — deterministischer Pre-Check für numerische Korrektheit. Extrahiert Zahlen, Daten und Wochentage aus Referenz und Antwort und vergleicht direkt, bevor BERTScore und ROUGE-L berechnet werden. Läuft zwischen Ausweich-Check und ROUGE/BERT-Baum. Wochentage DE/EN als Enum, deutsche Zahlwörter 2–12 (ein/eine ausgenommen wegen Artikel-Kollision), Jahres-Erkennung nur 1990–2035. Rollout-Schalter `VALUECHECK_HART`: True=Score 0 hart, False=Grauzone.
+
+### Referenz-Loader (06.07.)
+
+`tools/evaluation/referenz_loader.py` — rendert dynamische Platzhalter (`{heute}`, `{heute+21}`, `{tage_seit:YYYY-MM-DD}`) beim Laden der Testfragen aus `date.today()`. Testsets veralten nicht mehr ab dem Folgetag.
+
+### DIAG_ZU_QUALITAET als zentrale Konstante (06.07.)
+
+Vorher in `grid_run.py`, `ragas_scorer.py` und `analyse_csv.py` dreifach dupliziert. Jetzt zentral in `auto_scorer.py` definiert. `grid_run.py` importiert die Konstante — die anderen zwei folgen.
+
+---
+
+## Tool-Use-Architektur — agent_datum (06.07.)
+
+Die Query-Pipeline hat eine neue erste Stufe: einen deterministischen Tool-Use-Guard vor dem RAG-Router.
+
+### Konzept
+
+`rag/agent_datum.py` klassifiziert eingehende Fragen anhand von drei Bedingungen: konkreter Datumsanker in der Frage (heute, Weihnachten, Silvester), klare Kalender-Operation (Wochentag, Differenz, +N Tage/Wochen), kein SUSIpedia-Entitätsname (susi, stockpredict, projekt, mein/e, ich). Im Zweifel → LLM+RAG. Nur wenn alle drei Bedingungen erfüllt sind: Python `datetime`, kein LLM-Aufruf.
+
+### Integration in query.py
+
+`ask_susi()` bekommt einen `mode`-Parameter (Default `"auto"`). Der agent_datum-Guard ist aktiv bei `mode="auto"` UND `lang="de"`. Der `mode`-Parameter behebt gleichzeitig den 500-Fehler `TypeError: ask_susi() got an unexpected keyword argument 'mode'` der beim Frontend-Toggle auftrat.
+
+### Ergebnis
+
+Produktiv verifiziert: „Wie viele Tage seit dem 01.07.2026?" → Antwort in 0.001s, `🧮 agent_datum` als Quellenmarker im Frontend. Datumsfragen: Ø Score von 0.20 (ValueCheck deckt Fehler auf) auf 2.00 (agent_datum löst 8/10 korrekt). Naming Convention `agent_*.py` für künftige Werkzeuge (Britannica, PDF etc.).
+
+### Aktuelle Query-Pipeline (Stand Juli 2026)
+
+```
+Frage rein
+→ detect_language()            ← LLM-Call, ISO 639-1, num_ctx=128, temp=0.0
+→ agent_datum.ist_kalenderfrage()  ← Tool-Use-Guard vor RAG
+  ├─ True + mode=auto|manuell + lang=de → Python datetime, ~1ms
+  └─ False → normale Pipeline
+→ rewrite_query()              ← LLM-Call, Coreference, letzte 2 Q/A
+→ ChromaDB Retrieval           ← bge-m3, k=7–9 je Profil
+→ bge-reranker-v2-m3           ← Top 3
+→ router.py                    ← Ordnerpfad-Voting, reranker-gewichtet
+→ Profil wählen                ← LLM + Parameter
+→ Antwort generieren           ← lang_instruction direkt vor "Antwort:"
+→ Frontend                     ← tok/s + Tokens + Quelldateien via HTMX OOB
+```
 
 ---
 
@@ -169,29 +246,21 @@ Die Konfiguration mit k=3 ohne Reranker erzielte einen Ø Score von 2.97 bei 98%
 
 ### Ergebnisse nach Kategorie
 
-Die Kategorie `projekte` erzielte Ø 3.02 bei 99% Korrektheit. Die Kategorie `persoenlich` erzielte Ø 3.00 bei 99%. Die Kategorie `lernen` erzielte Ø 2.99 bei 100%. Die Kategorie `susi` erzielte Ø 2.95 bei 98% — die schwächste Kategorie mit bekanntem Retrieval-Problem durch fehlende Topic-Label Ankersätze in den SUSI-eigenen Dokumentationsdateien.
+Die Kategorie `projekte` erzielte Ø 3.02 bei 99% Korrektheit. Die Kategorie `persoenlich` erzielte Ø 3.00 bei 99%. Die Kategorie `lernen` erzielte Ø 2.99 bei 100%. Die Kategorie `susi` erzielte Ø 2.95 bei 98% — die schwächste Kategorie.
 
 ### Kernerkenntnis
 
-Parameter-Unterschiede betragen maximal 0.07 Punkte und sind damit statistisch irrelevant. Der größte Hebel war Dokumentqualität — die Hit Rate stieg von 36% auf 91% allein durch bessere Quelldokumente und optimierte Chunk-Größen. Die Phase der Parameter-Optimierung ist damit abgeschlossen.
+Parameter-Unterschiede betragen maximal 0.07 Punkte und sind damit statistisch irrelevant. Der größte Hebel war Dokumentqualität — die Hit Rate stieg von 36% auf 91% allein durch bessere Quelldokumente und optimierte Chunk-Größen. Die Phase der Parameter-Optimierung ist abgeschlossen.
 
 ---
 
-## Lauf D — Ausblick
+## GitHub — Build in Public (Stand Juli 2026)
 
-Lauf D verschiebt den Fokus von Parameter-Optimierung auf Qualitätsmessung der neuen Produktiv-Komponenten.
-
-### Was in Lauf D getestet wird
-
-Die Router-Qualität wird anhand einer Validierung gegen manuelle Gold-Standard-Zuordnungen gemessen: Wählt der Router das richtige Profil? Der qwen3-Vergleich testet `qwen2.5-coder:7b` gegen `qwen3:14b` und `qwen3.5:9b` mit 30 bis 50 Fragen pro Kategorie. Der Thinking Mode untersucht die Auswirkung von `thinking on/off` auf die Antwortqualität, was ein qwen3-spezifisches Feature ist. Die `susi`-Kategorie erhält eine gezielte Miss-Analyse als schwächste Kategorie mit 98%.
-
-### Umfang und neue Variablen
-
-Lauf D ist kein Grid-Lauf, sondern umfasst 100 bis 150 gezielte Fragen mit 4 bis 6 Konfigurationen. Im Unterschied zu Lauf C ist der Router aktive Komponente, Query Rewriting ist aktiv, und qwen3 bringt den Thinking Mode als neue Variable.
+Das Repository `github.com/Martin-Frei/SUSI` ist öffentlich. In 14 Tagen: 33 Unique Cloners, Traffic primär über LinkedIn-Direktlinks. Markus hat das Repo geforkt und trägt als Community-Contributor bei. Sechs saubere Commits am 07.07. im Conventional-Commit-Format (`feat/refactor/config/docs`). `Test_query.py` in `.gitignore` aufgenommen.
 
 ---
 
-## Stand: Juni 2026 · Martin Freimuth
+## Stand: Juli 2026 · Martin Freimuth
 
 → Zurück zur Übersicht: `susi_00_übersicht.md`
 → Zurück: `susi_07_roadmap.md`
