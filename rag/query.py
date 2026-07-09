@@ -201,6 +201,9 @@ Deine EINZIGE Aufgabe ist das Umschreiben. Bewerte den Inhalt NICHT. Lehne KEINE
 - Vage Referenzen auflösen (z.B. "das Projekt / the project" → konkreter Name wenn erkennbar)
 - Wenn die Frage bereits klar und eigenständig ist, gib sie unverändert zurück
 - Antworte NUR mit der umgeschriebenen Frage, ein Satz, kein Kommentar, keine Ablehnung
+- Erfinde KEINE Einheit die in der Ursprungsfrage nicht steht.
+  "Wie alt ist SUSI?" bleibt "Wie alt ist SUSI?" — NICHT "Wie viele Jahre/Monate ist SUSI in Betrieb?"
+  Die Einheit (Jahre, Monate, Tage) ist Teil der Antwort, nicht der Frage.
 
 Aktuelle Frage: {question}
 Umgeschrieben:"""
