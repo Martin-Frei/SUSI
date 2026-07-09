@@ -95,6 +95,11 @@ DATUM_MUSTER = [
     # "Weihnachten 2026", "Silvester 2026" mit Jahr
     re.compile(r"\b(" + "|".join(ANKER_TAG_MONAT.keys())
                + r")\s+(\d{4})\b", re.IGNORECASE),
+    # NEU: Tag. Monat ohne Jahr: "29. November", "5. März"
+    re.compile(r"\b(\d{1,2})\.\s*(" + "|".join(MONAT_ZU_NUM.keys()) + r")\b",
+               re.IGNORECASE),
+    # NEU: Tag.Monat. ohne Jahr: "29.11."
+    re.compile(r"(?<!\d)(\d{1,2})\.(\d{1,2})\.(?!\d)"),
 ]
 
 HEUTE_MUSTER = re.compile(r"\b(heute|jetzt|aktuell)\b", re.IGNORECASE)
@@ -137,6 +142,9 @@ def _hat_kalender_operation(text: str) -> bool:
 # ── Bedingung 3 — Keine SUSIpedia-Entität ────────────────────────
 
 def _hat_entitaet(text: str) -> Optional[str]:
+    # Explizites Datum in der Frage → Entität irrelevant, Python kann direkt rechnen
+    if any(m.search(text) for m in DATUM_MUSTER):
+        return None
     t = text.lower()
     for e in ENTITAETEN:
         if re.search(rf"\b{re.escape(e)}\b", t):
@@ -208,6 +216,35 @@ def _parse_datum(text: str) -> list[date]:
             treffer.append(date(y, mo, d))
         except ValueError:
             pass
+        
+    # Ohne Jahr: "29. November" / "29.11." → nächstes Vorkommen
+    for m in re.finditer(
+        r"\b(\d{1,2})\.\s*(" + "|".join(MONAT_ZU_NUM.keys()) + r")\b",
+        text, re.IGNORECASE
+    ):
+        d, mo = int(m.group(1)), MONAT_ZU_NUM[m.group(2).lower()]
+        y = date.today().year
+        try:
+            candidate = date(y, mo, d)
+            if candidate < date.today():
+                candidate = date(y + 1, mo, d)
+            if candidate not in treffer:  # kein Duplikat wenn Jahr-Variante schon gefunden
+                treffer.append(candidate)
+        except ValueError:
+            pass
+
+    for m in re.finditer(r"(?<!\d)(\d{1,2})\.(\d{1,2})\.(?!\d)", text):
+        d, mo = int(m.group(1)), int(m.group(2))
+        if 1 <= d <= 31 and 1 <= mo <= 12:
+            y = date.today().year
+            try:
+                candidate = date(y, mo, d)
+                if candidate < date.today():
+                    candidate = date(y + 1, mo, d)
+                if candidate not in treffer:
+                    treffer.append(candidate)
+            except ValueError:
+                pass
 
     return treffer
 
