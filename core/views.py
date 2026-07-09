@@ -95,7 +95,7 @@ def chat_view(request):
         "messages":         messages,
         "all_chats":        all_chats,
         "chat_mode":        chat_mode,
-        "modes":            [("AUTO", "AUTO"), ("MANUELL", "MANUELL"), ("CODING", "CODING")],
+        "modes":            [("AUTO", "AUTO"), ("MANUELL", "MANUELL"), ("CHUNKING", "CHUNKING")],
         "llm_model":        ms["llm_model"],
         "embedding_model":  cfg["retrieval"]["embedding_model"],
         "top_k":            ms["top_k"],
@@ -322,8 +322,8 @@ def upload_view(request):
 
 @require_POST
 def set_mode_view(request):
-    """HTMX-Endpunkt — Chat-Modus wechseln (AUTO / MANUELL / CODING)"""
-    valid_modes = {"AUTO", "MANUELL", "CODING"}
+    """HTMX-Endpunkt — Chat-Modus wechseln (AUTO / MANUELL / CHUNKING)"""
+    valid_modes = {"AUTO", "MANUELL", "CHUNKING"}
     mode = request.POST.get("mode", "AUTO").upper()
     if mode not in valid_modes:
         mode = "AUTO"
@@ -337,7 +337,7 @@ def set_mode_view(request):
 
     return render(request, "core/partials/mode_toggle.html", {
         "chat_mode":     mode,
-        "modes":         [("AUTO", "AUTO"), ("MANUELL", "MANUELL"), ("CODING", "CODING")],
+        "modes":         [("AUTO", "AUTO"), ("MANUELL", "MANUELL"), ("CHUNKING", "CHUNKING")],
         "llm_model":     cfg["generation"]["llm_model"],
         "embedding_model": cfg["retrieval"]["embedding_model"],
         "top_k":         cfg["retrieval"]["top_k"],

@@ -1,5 +1,5 @@
 generation:
-  keep_alive: 0
+  keep_alive: 300
   llm_model: llama3.1:8b
   num_ctx: 4096
   system_prompt: praezise_neu

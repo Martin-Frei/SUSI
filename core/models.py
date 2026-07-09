@@ -31,7 +31,7 @@ class Chat(models.Model):
     MODE_CHOICES = [
         ("AUTO",    "AUTO — Router bestimmt Profil"),
         ("MANUELL", "MANUELL — User stellt Parameter"),
-        ("CODING",  "CODING — Dokument-Ingest Workflow"),
+        ("CHUNKING", "CHUNKING — Dokument-Aufbereitung für Ingest"),
     ]
 
     id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
