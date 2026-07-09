@@ -116,11 +116,11 @@ OPERATION_MUSTER = [
     re.compile(r"\bwochentag\s+(war|ist|fällt|fiel)\b", re.IGNORECASE),
     # "wie viele Tage ... seit/bis/zwischen" — Zwischenwörter erlaubt
     # (sind, liegen, sind es, hat es noch ...)
-    re.compile(r"\bwie\s+viele?\s+tage?\b.{0,40}?\b(seit|bis|zwischen|zw\.)\b",
+    re.compile(r"\bwie\s*viele?\s+tage?\b.{0,40}?\b(seit|bis|zwischen|zw\.)\b",
                re.IGNORECASE),
-    re.compile(r"\bwie\s+viele?\s+wochen?\b.{0,40}?\b(seit|bis|zwischen|zw\.|noch)\b",
+    re.compile(r"\bwie\s*viele?\s+wochen?\b.{0,40}?\b(seit|bis|zwischen|zw\.|noch)\b",
                re.IGNORECASE),
-    re.compile(r"\bwie\s+viele?\s+monate?\b.{0,40}?\b(seit|bis|zwischen|zw\.)\b",
+    re.compile(r"\bwie\s*viele?\s+monate?\b.{0,40}?\b(seit|bis|zwischen|zw\.)\b",
                re.IGNORECASE),
     re.compile(r"\b(in|nach)\s+(exakt\s+)?\d+\s+(tag|tage|woche|wochen)\b",
                re.IGNORECASE),
@@ -281,7 +281,7 @@ def beantworte_kalenderfrage(text: str, heute: Optional[date] = None) -> str:
                 f"Nächste Woche ist der {_formatiere(ziel)}.")
 
     # 5) Wie viele Tage/Wochen/Monate seit einem Datum
-    if re.search(r"\b(wie\s+viele?)\s+(tage?|wochen?|monate?)\b.{0,40}?\bseit\b",
+    if re.search(r"\b(wie\s*viele?)\s+(tage?|wochen?|monate?)\b.{0,40}?\bseit\b",
                  t) and daten:
         d = daten[0]
         diff = (heute - d).days
@@ -299,7 +299,7 @@ def beantworte_kalenderfrage(text: str, heute: Optional[date] = None) -> str:
                 f"sind {diff} Tage vergangen.")
 
     # 6) Wie viele Wochen/Tage/Monate bis zu einem Datum
-    if re.search(r"\b(wie\s+viele?)\s+(tage?|wochen?|monate?)\b.{0,40}?\b"
+    if re.search(r"\b(wie\s*viele?)\s+(tage?|wochen?|monate?)\b.{0,40}?\b"
                  r"(bis|zu)\b", t) and daten:
         d = daten[0]
         diff = (d - heute).days
