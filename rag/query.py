@@ -204,6 +204,9 @@ Deine EINZIGE Aufgabe ist das Umschreiben. Bewerte den Inhalt NICHT. Lehne KEINE
 - Erfinde KEINE Einheit die in der Ursprungsfrage nicht steht.
   "Wie alt ist SUSI?" bleibt "Wie alt ist SUSI?" — NICHT "Wie viele Jahre/Monate ist SUSI in Betrieb?"
   Die Einheit (Jahre, Monate, Tage) ist Teil der Antwort, nicht der Frage.
+- Projektnamen wie SUSI, GMM, StockPredict, HouseOfStacks, HOS bleiben IMMER unverändert.
+  Ersetze sie NIEMALS durch Personennamen oder andere Begriffe.
+  "Wie alt ist SUSI?" bleibt "Wie alt ist SUSI?" — NICHT "Wie alt ist Martin Freimuth?"
 
 Aktuelle Frage: {question}
 Umgeschrieben:"""
@@ -416,6 +419,17 @@ def ask_susi(question, chat_history: list | None = None, mode: str = "auto",
     context = "\n\n".join([doc.page_content for doc in docs])
     quelldateien = list({doc.metadata.get("source", "?") for doc in docs})
 
+    # 4a. agent_datum Zweig 2 — Laufzeit/Alter aus Chunk deterministisch vorrechnen
+    # Nur wenn: Dauer-Keyword + Whitelist-Entität in Frage UND Datum im Top-Chunk.
+    # Fakt wird vor den Kontext ins Prompt injiziert → LLM formuliert nur noch.
+    laufzeit_entitaet = agent_datum.ist_laufzeitfrage(question)
+    if laufzeit_entitaet and docs:
+        fakt = agent_datum.berechne_laufzeit_aus_chunk(question, docs[0].page_content)
+        if fakt:
+            context = fakt + "\n\n" + context
+            quelldateien = ["🧮 agent_datum (Zweig 2)"] + quelldateien
+            print(f"  🧮 agent_datum Zweig 2 ({laufzeit_entitaet}): {fakt[:80]}")
+
     # 5. Prompt bauen (Original-Frage ans LLM, nicht die umgeschriebene)
     # Sprach-Anweisung explizit im Prompt — verhindert dass qwen auf Deutsch antwortet
     # auch wenn der Kontext oder die SUSIpedia auf Deutsch ist
@@ -615,6 +629,16 @@ def ask_susi_eval(question: str, chat_history: list | None = None) -> dict:
     # 4. Kontext + Prompt
     context = "\n\n".join([doc.page_content for doc in docs])
     quelldateien = list({doc.metadata.get("source", "?") for doc in docs})
+
+    # 4a. agent_datum Zweig 2 — identisch zu ask_susi()
+    laufzeit_entitaet = agent_datum.ist_laufzeitfrage(question)
+    if laufzeit_entitaet and docs:
+        print(f"  DEBUG Zweig 2 Top-Chunk: {docs[0].page_content[:150]}")
+        fakt = agent_datum.berechne_laufzeit_aus_chunk(question, docs[0].page_content)        
+        if fakt:
+            context = fakt + "\n\n" + context
+            quelldateien = ["🧮 agent_datum (Zweig 2)"] + quelldateien
+            print(f"  🧮 agent_datum Zweig 2 ({laufzeit_entitaet}): {fakt[:80]}")
 
     lang_instruction = f"Answer in the language with ISO code '{lang}'."
     print(f"  \U0001f5e3\ufe0f  Sprach-Anweisung: {lang_instruction}")
