@@ -45,7 +45,7 @@ retrieval:
   top_k_values:  [3, 5, 7, 8, 9]   # über alle Läufe getestet
   algorithms:
     - name: "similarity"   # aktiv in allen Läufen
-    - name: "mmr"          # geplant, noch nicht evaluiert
+    - name: "mmr"          # evaluiert in Lauf C — Ø 2.99 vs. similarity Ø 3.01, statistisch irrelevant
   score_thresholds: [null]
 
 generation:
@@ -272,7 +272,7 @@ Grid: 4 Testfragen × 5 Prompts × k=3/5 × 4 Configs = 160 Läufe gesamt
 | BERTScore Ø | 0.723 |
 | ROUGE-L Ø | 0.272 |
 
-**Kernerkenntnis:** k=3 statt k=8 liefert 81% — schlechter als k=8 in den vorherigen Smoke-Tests. Das ist überraschend und widerspricht der Intuition dass weniger Chunks weniger Kontext-Mixing bedeuten. Mögliche Erklärung: bei k=3 fehlt manchmal der entscheidende ergänzende Chunk der nur bei Hit@4 oder Hit@5 auftaucht (vgl. Retrieval Check: Hit@3 = 65%, Hit@5 = 70%). Der Smoke-Test lief zudem über alle 5 Prompt-Varianten gleichzeitig — unterschiedliche Prompts können das Ergebnis verzerren.
+**Kernerkenntnis:** k=3 statt k=8 liefert 81% — schlechter als k=8 in den vorherigen Smoke-Tests. Das ist überraschend und widerspricht der Intuition, dass weniger Chunks weniger Kontext-Mixing bedeuten. Mögliche Erklärung: bei k=3 fehlt manchmal der entscheidende ergänzende Chunk der nur bei Hit@4 oder Hit@5 auftaucht (vgl. Retrieval Check: Hit@3 = 65%, Hit@5 = 70%). Der Smoke-Test lief zudem über alle 5 Prompt-Varianten gleichzeitig — unterschiedliche Prompts können das Ergebnis verzerren.
 
 ---
 
@@ -404,7 +404,7 @@ Der Sprung von 48% auf 94% ist kein Zufall — er ist das Ergebnis systematische
 2. Chunk-Größe: 300 → 1000 (+Kontext, weniger Fragmentierung)
 3. Prompt: susi_standard → praezise_alt (präzisere Instruktionen)
 
-Die hohen Smoke-Test-Ergebnisse (94%+) müssen mit dem vollen Datensatz (64%) relativiert werden — beide Messungen sind wichtig, aber der volle Datensatz ist der belastbarere Wert.
+Die hohen Smoke-Test-Ergebnisse (94%+) müssen mit dem vollen Datensatz (60%) relativiert werden — beide Messungen sind wichtig, aber der volle Datensatz ist der belastbarere Wert.
 
 ---
 
@@ -472,7 +472,9 @@ ausgebaut: 293 Fragen, 20 Parameterkombinationen, 5.860 Runs.
 Config: bge-m3 | chunk=1000/o50 | k=3/5/7/9 | similarity + mmr | qwen2.5-coder:7b + llama3.1:8b | temp=0.0 | mit/ohne Reranker
 ```
 
-**Gesamtergebnis:**
+**Hinweis zur Skala:** Lauf C bewertet noch auf der archivierten **Quality-Rohskala 0–3** — dem Vorgänger der heutigen 0–2-Quality-Skala, nicht zu verwechseln mit der Diagnostic-Skala 0–5 des Auto-Scorers (Score 3 hier bedeutet "RAG perfekt", nicht Diagnostic-Score 3). Die folgenden Ø-Scores sind daher **nicht** normiert und nicht direkt mit den auf 0–2 umgestellten Läufen D/E/F vergleichbar. Belastbar über den Skalenbruch hinweg ist nur die Korrektheitsquote (`Score ≥ 2`) und die skalenunabhängige Hit Rate.
+
+**Gesamtergebnis (Quality-Rohskala 0–3):**
 
 | Konfiguration | Ø Score | Korrekt |
 |---|---|---|
@@ -501,13 +503,31 @@ durch bessere Topic-Label Ankersätze in den SUSI-eigenen Dokumentationsdateien.
 
 → *Details: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
 
-## Lauf D — Router-Tracking *(24.06.2026)*
+## Lauf D — Breitenlauf mit RAGAS-Validierung *(24.–25.06.2026)*
 
-Nachdem Lauf C gezeigt hat dass Parameter-Unterschiede minimal sind, verschiebt sich der Fokus: die Qualität der neuen Produktiv-Komponenten wird gemessen, nicht mehr die beste Parameter-Kombination gesucht.
+Nachdem Lauf C gezeigt hat dass Parameter-Unterschiede minimal sind, verschiebt sich der Fokus: die Qualität der Produktiv-Komponenten wird gemessen, nicht mehr die beste Parameter-Kombination gesucht. Lauf D ist ein Breitenlauf mit **800 Runs**, ausgewertet über die neue 0–2-Qualitätsskala.
 
-`evaluator.py` und `analyse_csv.py` wurden um die Spalten `router_profil` und `router_korrekt` erweitert. Jeder Evaluierungslauf protokolliert jetzt welches Profil der Router gewählt hat und ob das mit der erwarteten Gold-Standard-Zuordnung übereinstimmt.
+**Wichtig zur Vergleichbarkeit:** Lauf D verwendet die 0–2-Skala, Lauf C die alte 0–3-Skala. Die beiden Läufe sind deshalb in den Ø-Scores nicht direkt vergleichbar. Manuell vergebene 3er aus der Lauf-C-Ära werden vom aktuellen Analyser als ungültig ignoriert. Der belastbare Vergleichswert über den Skalenbruch hinweg bleibt die Hit Rate (36% → 91%).
 
-**Ergebnis:** Router-Accuracy stabil bei ~70%. Die Kategorie `technisch` ist mit 60% die strukturell schwächste — hier ist der inhaltliche Ausbau von `docs/technik/` der direkte Hebel.
+**Das Grauzonen-Problem:** Der Auto-Scorer konnte nur 70.1% der 800 Einträge eindeutig bewerten, 29.9% fielen in die Grauzone. Der Grund ist bekannt aus Kapitel-04-Metriken: paraphrasierte, inhaltlich korrekte Antworten erzeugen einen niedrigen ROUGE-L und rutschen dadurch aus dem Auto-Scorer-Fenster. Eine frühe Aussage von 18.8% Fehlerrate in der Kategorie `lernen` basierte nur auf den 214 sicher bewerteten Einträgen und war damit statistisch nicht belastbar.
+
+### RAGAS — die dritte Bewertungsstufe *(25.06.2026)*
+
+Um die Grauzone aufzulösen ohne einen neuen Grid-Lauf zu starten, kam eine dritte Bewertungsstufe dazu: `tools/evaluation/ragas_scorer.py`. RAGAS bewertet Grauzone-Einträge semantisch anhand von zwei Metriken — **Faithfulness** (ist die Antwort aus den Chunks ableitbar?) und **Answer Relevancy** (beantwortet sie die Frage?). Das Script läuft vollständig lokal mit Ollama (`qwen2.5:7b`) und `bge-m3` als Embedding, ohne OpenAI-Key, DSGVO-konform. Schwellenwerte: RAGAS-Score ≥ 0.50 → korrekt, ≤ 0.20 → falsch, dazwischen → Haiku-Judge als vierte Instanz.
+
+**Ergebnis der Grauzonen-Auflösung:** Von 239 Grauzone-Einträgen wurden 220 als korrekt bewertet (92.1%), 1 als falsch, 18 blieben unklar. Die Grauzone bestand also fast vollständig aus korrekten paraphrasierten Antworten, die der Auto-Scorer nur wegen niedrigem ROUGE-L nicht erkannte.
+
+**Gesamtergebnis Lauf D nach RAGAS:**
+
+| Kategorie | Korrektheit | Einträge |
+|-----------|-------------|----------|
+| technisch | 100% | 199 |
+| lernen | 97.4% | 196 |
+| persoenlich | 95.9% | 196 |
+| projekte | 94.7% | 191 |
+| **Gesamt** | **97.1%** | **782** |
+
+**Kernerkenntnis:** Die scheinbare 18.8%-Fehlerrate bei `lernen` war fast vollständig ein Grauzonen-Artefakt — nach RAGAS liegt sie bei 2.6%. Das eigentliche Problem war die Paraphrasierungs-Blindheit des Auto-Scorers, nicht die Dokumentqualität der `lernen`-Kategorie. In diesem Lauf ist `technisch` mit 100% die **stärkste** Kategorie — ein Punkt der in Lauf F mit der Live-Pipeline noch einmal ganz anders aussehen wird.
 
 ---
 
@@ -515,27 +535,45 @@ Nachdem Lauf C gezeigt hat dass Parameter-Unterschiede minimal sind, verschiebt 
 
 293 Fragen × 2 Konfigurationen: `qwen3:8b` mit `thinking=true` vs. `thinking=false`.
 
-**Ergebnis:**
+**Ergebnis (alle auf 0–2-Skala):**
 
-| Konfiguration | Korrektheit | Ø Score |
-|---|---|---|
-| qwen3:8b thinking=off | 96.9% | — |
-| qwen3:8b thinking=on | 96.9% | — |
-| qwen2.5-coder:7b (Lauf C) | 97.1% | 3.02 |
+| Konfiguration | Korrektheit |
+|---|---|
+| qwen3:8b thinking=off | 96.9% |
+| qwen3:8b thinking=on | 96.9% |
+| qwen2.5-coder:7b (Lauf D) | 97.1% |
 
-Unterschied thinking=on vs. off: 0.011 Punkte — statistisch irrelevant. `qwen3:8b` liegt praktisch gleichauf mit `qwen2.5-coder:7b`. Das `thinking`-Flag bringt für SUSIs Anwendungsfälle keinen messbaren Vorteil. `qwen2.5-coder:7b` bleibt primäres Produktionsmodell.
+Unterschied thinking=on vs. off: 0.011 Punkte — statistisch irrelevant. `qwen3:8b` (Lauf E) liegt praktisch gleichauf mit `qwen2.5-coder:7b` aus Lauf D. Das `thinking`-Flag bringt für SUSIs Anwendungsfälle keinen messbaren Vorteil. `qwen2.5-coder:7b` bleibt primäres Produktionsmodell.
 
-**Kernerkenntnis:** Größere Modelle in Q4-Quantisierung schlagen kleinere Modelle in Q8 — Parameter-Anzahl schlägt Quantisierungs-Präzision. Das bestätigt SUSIs Ansatz mit quantisierten 7B-Modellen auf Consumer-Hardware.
+**Kernerkenntnis:** Ein größeres Modell mit Reasoning-Modus liefert hier keinen messbaren Qualitätsgewinn gegenüber dem spezialisierten 7B-Coder-Modell — bei höherem Rechenaufwand. Für ein Wissens-RAG mit kurzen Faktenantworten ist das kleinere, token-effiziente Modell die richtige Wahl. Der Thinking-Overhead lohnt sich in dieser Domäne nicht.
 
 ---
 
-## Lauf F — Doppeltes Rewriting gefunden *(27.06.2026)*
+## Lauf F — Erste End-to-End-Router-Evaluation *(27.06.2026)*
 
-Bei der Analyse der Lauf-E-Ergebnisse wurde ein struktureller Bug entdeckt: `ask_susi_eval()` rief intern `ask_susi()` auf. `ask_susi()` enthält selbst einen Rewriter-Aufruf. Das Ergebnis: jede Testfrage wurde zweimal umgeschrieben.
+Läufe D und E hatten eine strukturelle Lücke: sie testeten nicht die vollständige Live-Pipeline. Das Router-Profil wurde manuell auf die erwartete Kategorie gesetzt — ob der Router im echten Betrieb auch selbst das richtige Profil wählt, war damit nicht gemessen. Lauf F schließt diese Lücke: mit dem neuen `--live`-Flag läuft die komplette Pipeline (detect_language, rewrite_query, Retrieval, Reranker, `router.py`, Generierung). Neu sind die CSV-Spalten `router_profil` und `router_korrekt`, die protokollieren welches Profil der Router gewählt hat und ob es mit der Gold-Standard-Kategorie übereinstimmt. Getestet wurden 40 Fragen (10 pro Kategorie).
 
-**Ausmaß:** ~16 Prozentpunkte Korrektheit verloren durch doppeltes Rewriting. Nach Fix: Kategorie `technisch` mit 60% als strukturell schwächste identifiziert — nicht als Rewriting-Artefakt, sondern als inhaltliches Signal für `docs/technik/`.
+**Der stille Bug — im ersten Live-Lauf entdeckt:** Der erste Durchlauf (F1) deckte einen Bug auf, der erst mit dem `--live`-Pfad aktiv wurde: `ask_susi_eval()` rief intern `ask_susi()` auf, das seinerseits `rewrite_query()` enthält. Jede Testfrage wurde dadurch zweimal umgeschrieben. Nach dem Fix führt `ask_susi_eval()` die Pipeline selbst durch, ohne `ask_susi()` intern aufzurufen.
 
-→ *Details: [susi_06_grenzerfahrungen.md — Grenzerfahrung 6](susi_06_grenzerfahrungen.md)*
+**Ausmaß — F1 vs. F2:**
+
+| Kategorie | F1 (mit Bug) | F2 (nach Fix) |
+|-----------|-------------|---------------|
+| lernen | 95.0% | 100% |
+| projekte | 75.0% | 100% |
+| persoenlich | 55.0% | 80.0% |
+| technisch | 80.0% | 60.0% |
+| **Gesamt** | **76.2%** | **92.5%** |
+
+Das doppelte Rewriting kostete **16.3 Prozentpunkte** Gesamt-Korrektheit. `persoenlich` war am stärksten betroffen, weil Eigennamen durch doppeltes Umschreiben verfälscht wurden.
+
+**Zwei Erkenntnisse, die manuelle Läufe nicht liefern konnten:**
+
+Erstens: **Router-Accuracy stabil bei ~70%.** Von 40 Fragen wurden 28 korrekt geroutet — konsistent in F1 und F2. Der Live-Router erreicht 92.5% gegenüber 97.1% bei manueller Profil-Zuweisung (Lauf D). Der Verlust von 4.6 Prozentpunkten ist der Preis des automatischen Routings — kein LLM-Qualitätsproblem, sondern falsch geroutete Fragen und Wissenslücken in einzelnen Profilen.
+
+Zweitens: **`technisch` ist mit 60% jetzt die schwächste Kategorie** — das genaue Gegenteil von Lauf D (100%, stärkste). Der Grund ist kein Widerspruch: In Lauf D wurde das Profil manuell gesetzt und RAGAS bewertete gegen den Referenztext; in Lauf F arbeitet RAGAS mit dem echten `kontext_text` der Live-Pipeline und deckt reale Wissenslücken in `docs/technik/` auf. Die niedrigere Zahl in F2 ist die validere. Der inhaltliche Ausbau von `docs/technik/` ist damit der direkte Hebel.
+
+→ *Details zum Rewriting-Bug: [susi_06_grenzerfahrungen.md — Grenzerfahrung 6](susi_06_grenzerfahrungen.md)*
 
 ---
 
@@ -543,7 +581,7 @@ Bei der Analyse der Lauf-E-Ergebnisse wurde ein struktureller Bug entdeckt: `ask
 
 ### Befund (30.06.)
 
-10 Kalenderfragen getestet. Der Auto-Scorer vergab allen 10 Einträgen `auto_score=3` — obwohl 5 faktisch falsch waren. SUSI nannte falsche Wochentage und falsche Tagesdifferenzen. BERTScore und ROUGE-L erkannten die Fehler nicht.
+10 Kalenderfragen getestet. Der Auto-Scorer vergab allen 10 Einträgen `auto_score=3` — obwohl 7 der 10 Antworten nicht korrekt waren (falsche Werte oder Ausweichantwort). SUSI nannte falsche Wochentage und falsche Tagesdifferenzen. BERTScore und ROUGE-L erkannten die Fehler nicht. Von diesen fängt ValueCheck die wertbasierten Fehler ab; der rein logische Fall (datum_09) bleibt außerhalb seines Scope.
 
 **Ursache:** Similarity-basierte Metriken können prinzipiell nicht erkennen ob eine Zahl richtig ist. "14 Tage" und "21 Tage" sind sich semantisch ähnlich — eine davon ist falsch. Das ist keine Kalibrierungs-Frage, sondern eine fundamentale Grenze der Metrik-Klasse.
 
@@ -551,7 +589,7 @@ Bei der Analyse der Lauf-E-Ergebnisse wurde ein struktureller Bug entdeckt: `ask
 
 ### Lösung — drei Schichten (06.07.)
 
-**Schicht 1 — ValueCheck** (`tools/evaluation/valuecheck.py`): deterministischer Pre-Check, läuft vor BERTScore und ROUGE-L. Extrahiert Zahlen, Daten und Wochentage aus Referenz und Antwort, vergleicht direkt. Findet Widerspruch → Score 0, kein weiterer Check nötig.
+**Schicht 1 — ValueCheck** (`tools/evaluation/valuecheck.py`): deterministischer Pre-Check, läuft vor BERTScore und ROUGE-L. Extrahiert Zahlen, Daten und Wochentage aus Referenz und Antwort, vergleicht direkt. Findet er einen Widerspruch → **Diagnostic Score 1** (Halluzination / falscher Wert), der über `DIAG_ZU_QUALITAET` auf Quality 0 gemappt wird. Score 0 bleibt der Ausweichantwort vorbehalten, deren Check vor ValueCheck läuft. *(→ Kapitel 06, Grenzerfahrung 5, für die vollständige Herleitung warum Similarity-Metriken hier versagen)*
 
 **Schicht 2 — Referenz-Loader** (`tools/evaluation/referenz_loader.py`): dynamische Platzhalter in Testfragen (`{heute}`, `{heute+21}`, `{tage_seit:YYYY-MM-DD}`) werden beim Laden aus `date.today()` gerendert. Testsets veralten nicht mehr über Nacht.
 
@@ -576,7 +614,7 @@ Vorher in `grid_run.py`, `ragas_scorer.py` und `analyse_csv.py` dreifach duplizi
 
 ### Zwei Skalen — klare Trennung
 
-Die Diagnostic Scale (0–5) erklärt *warum* eine Antwort so ist. Die Quality Scale (0–2) beantwortet *ob* sie korrekt ist für den Nutzer. Das Mapping `DIAG_ZU_QUALITAET`: 0→0, 1→0, 2→1, 3→2, 4→0, 5→0. Der Auto-Scorer schreibt nur 0 oder 2 in `score_manuell` — nie 1 automatisch.
+Die Diagnostic Scale (0–5) erklärt *warum* eine Antwort so ist. Die Quality Scale (0–2) beantwortet *ob* sie korrekt ist für den Nutzer. Das Mapping `DIAG_ZU_QUALITAET`: 0→0, 1→0, 2→1, 3→2, 4→0, 5→0. Der Quality-Wert 1 (teilweise korrekt) entsteht ausschließlich über diese Mapping-Regel aus Diagnostic 2 (Training korrekt) — der Auto-Scorer vergibt ihn also nicht aus einer eigenen Metrik-Schwelle, sondern nur als Abbild des Diagnostic-Werts.
 
 ---
 
@@ -590,9 +628,9 @@ Die Diagnostic Scale (0–5) erklärt *warum* eine Antwort so ist. Die Quality S
 
 **Hybrid Search:** Weiterhin offen. GMM-Misses deuten auf Keyword-Bedarf hin. Entscheidung zurückgestellt bis Router-Accuracy weiter analysiert ist.
 
-**Router-Accuracy ~70%:** Kategorie `technisch` mit 60% am schwächsten. Inhaltlicher Ausbau `docs/technik/` ist der primäre Hebel.
+**Router-Accuracy ~70%:** Details und Ursache siehe Lauf F oben.
 
-**agent_datum Zweig 2:** Fragen mit Entitätsbezug ("Wie alt ist SUSI?") brauchen Datum aus retrievtem Chunk + Python-Berechnung. Noch offen.
+**agent_datum Zweig 2:** Gelöst (10.07.2026). Fragen mit Entitätsbezug ("Wie alt ist SUSI?") extrahieren das Startdatum aus dem retrievten Chunk, Python berechnet die Differenz und injiziert sie als fertigen Fakt ins Prompt. Das LLM formuliert nur noch, rechnet nicht mehr. Details: Kapitel 08.
 
 **`ragas_scorer.py` Stacked-CSV-Bug:** verliert `auto_score`-Werte bei gestapelten CSVs. Fix ausstehend.
 

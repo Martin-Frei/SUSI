@@ -1,5 +1,5 @@
 # 03 — SUSIpedia — Die Wissensbasis
-### SUSI Entwicklungsbericht · Stand Juni 2026
+### SUSI Entwicklungsbericht · Stand Juli 2026
 
 ---
 
@@ -173,20 +173,20 @@ docs/coding/            ✅ öffentlich
 docs/technik/           ✅ öffentlich
 docs/susipedia_formatierungsregeln.md  ✅ öffentlich
 docs/susi_vision.md     ✅ öffentlich
-docs/tree.md            ✅ öffentlich — zeigt die Struktur ohne sensible Inhalte
 ```
+
+`docs/tree.md` wurde am 20.06.2026 als veraltet gelöscht (siehe Kapitel 08) und ist daher nicht mehr Teil der öffentlichen Struktur.
 
 ### Was nicht öffentlich ist
 
 ```
 docs/martin/            ❌ Lebenslauf, Ziele, Profil
 docs/familie/           ❌ Familiäre Daten
-docs/job/               ❌ Bewerbungen, Jobsuche
+docs/job/               ❌ Bewerbungen, Jobsuche (inkl. ehemaligem skills/, seit Umstrukturierung integriert)
 docs/lernen/            ❌ Interview-Vorbereitung, persönliche Lernmaterialien
 docs/hobbys/            ❌ Persönliche Interessen
 docs/tagebuch/          ❌ Persönliche Reflexionen
 docs/persoenlich/       ❌ Private Gedanken
-docs/skills/            ❌ Bewerbungs-Skills
 docs/finanzen/          ❌ Finanzielle Daten
 docs/wohnen/            ❌ Wohnsituation
 docs/freunde/           ❌ Kontakte
@@ -207,9 +207,10 @@ docs/*
 !docs/coding/**
 !docs/technik/
 !docs/technik/**
+!docs/susi/
+!docs/susi/**
 !docs/susipedia_formatierungsregeln.md
 !docs/susi_vision.md
-!docs/tree.md
 ```
 
 Der Vorteil: Neue Ordner in `docs/` werden automatisch ignoriert ohne dass `.gitignore` angepasst werden muss. Das Sicherheitsprinzip gilt also auch für zukünftige Inhalte.
@@ -229,4 +230,4 @@ Danach wurde die Remote-Verbindung neu gesetzt und die bereinigte History mit `-
 → *Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
 → *Weiter: [susi_04_evaluation.md](susi_04_evaluation.md)*  
 → *Produktivbetrieb: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*  
-*Stand: Juni 2026 · Martin Freimuth*
+*Stand: Juli 2026 · Martin Freimuth*

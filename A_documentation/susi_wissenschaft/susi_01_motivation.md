@@ -1,5 +1,5 @@
 # 01 — Motivation und Problemstellung
-### SUSI Entwicklungsbericht · Stand Juni 2026
+### SUSI Entwicklungsbericht · Stand Juli 2026
 
 ---
 
@@ -7,7 +7,7 @@
 
 Die Frage klingt auf den ersten Blick nach einem Hobby-Projekt. Sie ist es nicht.
 
-Kommerzielle KI-Assistenten wie Microsoft Copilot, ChatGPT oder Google Gemini sind beeindruckend — aber sie haben drei strukturelle Schwächen die für den ernsthaften persönlichen und beruflichen Einsatz problematisch sind. Diese drei Schwächen sind gleichzeitig die drei Gründe warum SUSI gebaut wurde.
+Kommerzielle KI-Assistenten wie Microsoft Copilot, ChatGPT oder Google Gemini sind beeindruckend — aber sie haben drei strukturelle Schwächen, die für den ernsthaften persönlichen und beruflichen Einsatz problematisch sind. Diese drei Schwächen sind gleichzeitig die drei Gründe warum SUSI gebaut wurde.
 
 ---
 
@@ -19,7 +19,7 @@ Die offensichtlichste Motivation. Jede Eingabe in einen Cloud-basierten KI-Assis
 - Kundendaten werden zu Trainingszwecken potenziell weiterverarbeitet
 - Geschäftsgeheimnisse sind rechtlich nur schwer schützbar sobald sie das Unternehmensnetzwerk verlassen haben
 
-Die relevanten Rechtsgrundlagen sind eindeutig: DSGVO, AI Act und das Geschäftsgeheimnisgesetz (GeschGehG) schaffen einen Rahmen der lokale Verarbeitung für viele Anwendungsfälle nicht nur sinnvoll, sondern notwendig macht. Kein AVV, keine DSFA, keine Abhängigkeit von Cloud-Verfügbarkeit oder Preisänderungen des Anbieters.
+Die relevanten Rechtsgrundlagen sind eindeutig: DSGVO, AI Act und das Geschäftsgeheimnisgesetz (GeschGehG) schaffen einen Rahmen, der die technischen Voraussetzungen für DSGVO-konforme, lokale Verarbeitung für viele Anwendungsfälle sinnvoll und in manchen Fällen praktisch alternativlos macht. Kein AVV, keine DSFA, keine Abhängigkeit von Cloud-Verfügbarkeit oder Preisänderungen des Anbieters.
 
 SUSI ist vollständig lokal. Kein einziger Byte verlässt das System.
 
@@ -53,7 +53,7 @@ Die SUSIpedia selbst ist ein Nebenprodukt dieses Lernprozesses. Jedes neue Konze
 
 ## Grund 4: Planung als Grundlage für Reproduzierbarkeit
 
-Viele Entwicklungsprojekte scheitern nicht an fehlender Technik, sondern an fehlender Struktur. Code der heute funktioniert aber morgen nicht mehr nachvollzogen werden kann ist wertlos. Ein System das nur der Entwickler selbst versteht ist nicht skalierbar.
+Viele Entwicklungsprojekte scheitern nicht an fehlender Technik, sondern an fehlender Struktur. Code, der heute funktioniert, aber morgen nicht mehr nachvollzogen werden kann, ist wertlos. Ein System das nur der Entwickler selbst versteht ist nicht skalierbar.
 
 Von Anfang an war deshalb ein Prinzip leitend: **Erst planen, dann umsetzen.**
 
@@ -71,7 +71,7 @@ Diese Disziplin macht SUSI reproduzierbar. Ein neuer Entwickler — oder Martin 
 
 Alle vier Motivationen münden in eine einzige Ausgangsfrage:
 
-> *"Wie baue ich einen KI-Assistenten, der vier Dinge gleichzeitig leistet: alles lokal verarbeiten, private Daten aktiv nutzbar machen, beim Aufbau täglich Wissen vermitteln — und so strukturiert entwickelt sein, dass er in einem Jahr noch genauso funktioniert und verstanden wird?"*
+> *"Wie baue ich einen KI-Assistenten, der vier Dinge gleichzeitig leistet: alles lokal verarbeiten, private Daten aktiv nutzbar machen, bei dessen Aufbau ich täglich dazulerne — und so strukturiert entwickelt sein, dass er in einem Jahr noch genauso funktioniert und verstanden wird?"*
 
 SUSI ist der Versuch einer Antwort darauf. Kein abgeschlossener — sondern ein laufender.
 
@@ -79,4 +79,4 @@ SUSI ist der Versuch einer Antwort darauf. Kein abgeschlossener — sondern ein 
 
 *→ Zurück zur Übersicht: [00_SUSI_Uebersicht.md](susi_00_übersicht.md)*  
 *→ Weiter: [02_Architektur.md](susi_02_architektur.md)*  
-*Stand: Juni 2026 · Martin Freimuth*
+*Stand: Juli 2026 · Martin Freimuth*

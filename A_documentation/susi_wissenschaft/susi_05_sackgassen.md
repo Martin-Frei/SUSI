@@ -1,11 +1,11 @@
 # 05 — Sackgassen und neue Architektur
-### SUSI Entwicklungsbericht · Stand Juni 2026
+### SUSI Entwicklungsbericht · Stand Juli 2026
 
 ---
 
 ## Vom Experiment zur bewussten Entscheidung
 
-Ein Entwicklungsprozess der keine Sackgassen kennt ist kein ehrlicher Entwicklungsprozess. Die folgenden vier Ansätze wurden konzipiert, implementiert — und nach systematischer Analyse bewusst verworfen. Jede verworfene Idee hat das System besser gemacht als jede die von Anfang an funktioniert hat, weil sie das Verständnis für die eigentlichen Risiken geschärft hat.
+Ein Entwicklungsprozess, der keine Sackgassen kennt, ist kein ehrlicher Entwicklungsprozess. Die folgenden vier Ansätze wurden konzipiert, implementiert — und nach systematischer Analyse bewusst verworfen. Jede verworfene Idee hat das System besser gemacht als jede die von Anfang an funktioniert hat, weil sie das Verständnis für die eigentlichen Risiken geschärft hat.
 
 Der Auslöser für die kritische Analyse war das formale Evaluierungsframework. Erst als Zahlen auf dem Tisch lagen wurde sichtbar was intuitiv nicht erkennbar war: ein System das sich selbst vergiftet produziert keine offensichtlichen Fehler — es produziert plausibel klingende falsche Antworten.
 
@@ -20,7 +20,7 @@ Der Auslöser für die kritische Analyse war das formale Evaluierungsframework. 
 
 Das System war vollständig implementiert und lief produktiv. Es fühlte sich nach echter KI an — SUSI lernt aus Gesprächen.
 
-**Warum verworfen — Das Self-Poisoning-Problem:** Wenn das Chat-Modell halluziniert schreibt es seine eigenen Fehler unbemerkt ins Langzeitgedächtnis zurück. Beim nächsten Mal findet das Retrieval diesen falschen Chunk und das LLM bestätigt die Fehlinformation mit noch mehr Überzeugung. Eine zerstörerische Feedback-Schleife die sich selbst verstärkt.
+**Warum verworfen — Das Self-Poisoning-Problem:** Wenn das Chat-Modell halluziniert schreibt es seine eigenen Fehler unbemerkt ins Langzeitgedächtnis zurück. Beim nächsten Mal findet das Retrieval diesen falschen Chunk und das LLM bestätigt die Fehlinformation mit noch mehr Überzeugung. Eine zerstörerische Feedback-Schleife, die sich selbst verstärkt.
 
 **Warum verworfen — Die Redundanz-Falle:** Wenn SUSI eine Frage korrekt beantwortet würde eine reine Automatik diese Antwort erneut speichern. Das erzeugt massive Daten-Duplikate im Vektorraum. Doppelte Chunks für denselben Inhalt verzerren die Similarity Scores und zerstören die Retrieval-Präzision durch Kontext-Mixing — exakt das Problem das bei `simulate_top_n_hg.md` manuell entdeckt und behoben wurde.
 
@@ -39,7 +39,7 @@ ist mit bge-reranker-v2-m3 (97% Korrektheit) bereits im Produktivbetrieb.
 
 **Der Ansatz:** Wenn neues Wissen zu einem bestehenden Thema entsteht sollte das Chat-Modell das alte Dokument und das neue Wissen nehmen und eine fusionierte, saubere Version schreiben. Automatische Wissensverdichtung statt wachsender Dateien.
 
-**Warum verworfen — Der Bock als Gärtner:** Es ist strukturell unlogisch dasselbe Modell das im Chat Fehler macht als fehlerfreien Redakteur einzusetzen. Das Modell konzentriert sich beim Umschreiben so stark auf das neue Wissen dass es alte fundamentale Fakten einfach löscht oder vergisst. Regressions-Fehler sind kaum erkennbar weil die fusionierte Version syntaktisch korrekt und inhaltlich plausibel wirkt — aber alte Fakten fehlen.
+**Warum verworfen — Der Bock als Gärtner:** Es ist strukturell unlogisch, dasselbe Modell, das im Chat Fehler macht, als fehlerfreien Redakteur einzusetzen. Das Modell konzentriert sich beim Umschreiben so stark auf das neue Wissen dass es alte fundamentale Fakten einfach löscht oder vergisst. Regressions-Fehler sind kaum erkennbar weil die fusionierte Version syntaktisch korrekt und inhaltlich plausibel wirkt — aber alte Fakten fehlen.
 
 **Die entscheidende Erkenntnis:** Konsolidierung ist eine redaktionelle Aufgabe. Redaktionelle Aufgaben brauchen menschliches Urteil.
 
@@ -91,11 +91,9 @@ Chat-Verlauf
 SUSIpedia (.md) → ingest.py → ChromaDB
 ```
 
-### Stufe 1 — Kurzzeitgedächtnis *(SQLite)* *(geplant)*
+### Stufe 1 — Kurzzeitgedächtnis *(SQLite)* *(produktiv seit 25.06.2026)*
 
-Der aktuelle Chatverlauf wird persistent in einer lokalen SQLite-Tabelle gehalten. Kein Datenverlust bei Ollama-Crashes. Kein automatisches Speichern.
-
-Der einzige Trigger ist der explizite Befehl `!save` — noch nicht implementiert, aber das zentrale Designprinzip: nur auf expliziten Wunsch, nie automatisch. Vorher wird der Chat programmatisch von Smalltalk bereinigt ("Danke", "Hallo", "Ok"). Der Local Storage wird erst gelöscht wenn das Wissen sicher im Core gelandet ist — nie vorher.
+Der aktuelle Chatverlauf wird persistent in einer lokalen SQLite-Tabelle gehalten (`Chat`, `Message`, `QueueItem`). Kein Datenverlust bei Ollama-Crashes. Jede SUSI-Antwort hat einen HitL-Queue-Button — per Klick landet die Antwort als `QueueItem` in der Datenbank für späteres Review. Was in dieser Stufe noch fehlt, ist das explizite `!save`-Kommando aus dem ursprünglichen Konzept: aktuell wird jede Antwort einzeln manuell in die Queue geschickt, nicht ein ganzer bereinigter Chatverlauf auf einen Befehl hin.
 
 ### Stufe 2 — Modell-Wechsel und automatisierter Türsteher *(Quarantäne)* *(geplant)*
 
@@ -113,13 +111,13 @@ Auf `!save` — sobald implementiert — gibt das Frontend sofort eine Rückmeld
 
 **Lösung:** Kein Standard-DeBERTa. Stattdessen ein mehrsprachiges Modell:
 - `Sahajpreet/german-deberta-v3-base-xnli` (deutsch-optimiert)
-- `amberoad/bert-multilingual-passage-reranking-msmarco` (mehrsprachig, auf MS MARCO trainiert)
+- ~~`amberoad/bert-multilingual-passage-reranking-msmarco`~~ (getestet als Reranker, 59% Korrektheit, disqualifiziert — siehe Kapitel 08. Als NLI-Türsteher-Kandidat für Stufe 2 damit ebenfalls nicht mehr erste Wahl.)
 
 Die Modellwahl für den Türsteher ist kein Detail — sie ist eine Sicherheitsanforderung.
 
-### Stufe 3 — Human-in-the-Loop Review *(SusiInbox)*
+### Stufe 3 — Human-in-the-Loop Review *(SusiInbox, geplant — aktuell Django Admin)*
 
-Besteht der Entwurf den automatischen Check landet er in einer Django-Datenbanktabelle (`SusiInbox`). Das Dashboard zeigt eine diskrete Benachrichtigung.
+Besteht der Entwurf den automatischen Check landet er in einer Django-Datenbanktabelle (`QueueItem`). Aktuell wird diese Tabelle im Django Admin reviewed; das eigens gestaltete Dashboard mit diskreter Benachrichtigung (`SusiInbox`) ist der noch ausstehende Frontend-Teil dieser Stufe.
 
 Die Kontroll-Matrix zeigt für jeden Vorschlag drei Dinge nebeneinander:
 
@@ -146,4 +144,4 @@ Die neue Architektur dreht das Verhältnis um: die KI ist ein hocheffizienter Se
 → *Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
 → *Weiter: [susi_06_grenzerfahrungen.md](susi_06_grenzerfahrungen.md)*  
 → *Produktivbetrieb: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*  
-*Stand: Juni 2026 · Martin Freimuth*
+*Stand: Juli 2026 · Martin Freimuth*

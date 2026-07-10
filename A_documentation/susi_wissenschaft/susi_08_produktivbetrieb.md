@@ -39,6 +39,8 @@ Der Smoke Test ergab 97% Korrektheit. Das Modell stammt vom selben Team wie das 
 
 Der direkte Vergleich zeigt das Ausmaß: `amberoad/bert-multilingual` erzielte ohne Reranker einen Ø Score von 2.94 bei 100% Korrektheit, mit Reranker nur Ø 1.75 bei 59% — ein katastrophaler Rückgang. `BAAI/bge-reranker-v2-m3` erzielte ohne Reranker Ø 3.00 bei 100% und mit Reranker Ø 2.91 bei 97% — ein minimal akzeptabler Trade-off.
 
+Dieser isolierte Smoke-Test-Rückgang beantwortet noch nicht, warum der Reranker überhaupt produktiv bleibt. Die Antwort liefert Lauf C mit voller Breite: dort schlägt die Konfiguration `k=7 mit Reranker` (Ø 3.01, 100%) die Konfiguration `k=3 ohne Reranker` (Ø 2.97, 98%). Der Reranker erlaubt ein größeres Retrieval-Fenster (mehr Recall im ersten Schritt) und sortiert daraus die besten Chunks nach vorne — netto ein Gewinn, sobald mehr als eine Handvoll Kandidaten im Spiel ist. Der Smoke-Test mit wenigen, ohnehin eindeutigen Fragen zeigt diesen Effekt nicht.
+
 ---
 
 ## qwen vs. llama — empirisches Modellprofil
@@ -87,7 +89,7 @@ Das Profil `susi` gilt für den Ordner `docs/susi/` und nutzt `qwen2.5-coder:7b`
 
 Der retrieval-getriebene Ansatz ist robuster, weil er sich an der tatsächlichen Wissensbasis orientiert und nicht an Sprachmustern. Er ist selbst-konsistent, weil SUSI ihre eigene SUSIpedia-Struktur kennt. Er vermeidet Overfitting: neue Ordner werden automatisch einem Profil zugeordnet. Er benötigt keinen Extra-LLM-Call, weil die Reranker-Scores bereits vorhanden sind.
 
-Das `thinking`-Flag ist in der Config und in `apply_profile()` für qwen3 vorbereitet. Bei einem Modellwechsel zu qwen3 genügt ein Eintrag in der Config — kein Code-Umbau nötig.
+Das `thinking`-Flag ist in der Config und in `apply_profile()` für qwen3 vorbereitet (Lauf E zeigte allerdings keinen signifikanten Qualitätsvorteil gegenüber thinking=off — siehe unten). Bei einem Modellwechsel zu qwen3 genügt ein Eintrag in der Config — kein Code-Umbau nötig.
 
 ---
 
@@ -153,9 +155,13 @@ Unter jeder Antwort erscheinen Metriken wie `⚡ 84.2 tok/s · 97 Tokens · 5.42
 
 Das SUSI-Icon ist im Superman-Schild-Stil gestaltet: Gold (#9A7000) auf Dunkel (#12122a), großes S als Serif-Buchstabe, ViewBox eng gecroppt für Favicon-Nutzung. Google Fonts wurden durch lokale `@font-face`-Deklarationen ersetzt. JetBrains Mono in den Gewichten 300, 400 und 600 sowie Syne in 400, 700 und 800 werden lokal geladen — kein externer Request, vollständig DSGVO-konform.
 
-### AUTO / MANUELL / CODING Toggle (Juni 2026)
+### AUTO / MANUELL / CHUNKING Toggle
 
-Ein Modus-Toggle im Chat-Header erlaubt das Umschalten zwischen drei Betriebsmodi. Der `mode`-Parameter fließt von `views.py` durch `ask_susi()` bis zum `agent_datum`-Guard. AUTO ist der Standard-Produktivmodus. MANUELL soll Router-Bypass mit Session-Overrides liefern — dieser Modus hat aktuell einen bekannten Bug: die Session-Werte (LLM, top_k, temp, num_ctx, Prompt) werden zwar geschrieben aber von `ask_susi()` nicht angewendet, der Router läuft weiterhin. Fix ist in Arbeit. CODING ist definiert aber noch nicht vollständig spezifiziert.
+Ein Modus-Toggle im Chat-Header erlaubt das Umschalten zwischen drei Betriebsmodi. Der `mode`-Parameter fließt von `views.py` durch `ask_susi()` bis zum `agent_datum`-Guard. AUTO ist der Standard-Produktivmodus mit aktivem Router.
+
+**MANUELL — repariert am 08.07.:** Der MANUELL-Modus liefert einen Router-Bypass mit benutzerdefinierten Parametern. Zuvor hatte er zwei Bugs. Erstens wurden die eingestellten Werte (LLM, top_k, temp, num_ctx, Prompt) zwar geschrieben, aber von `ask_susi()` nicht angewendet — der Router lief weiter. Zweitens, gravierender: `settings_view` schrieb bei jedem Slider-Klick direkt in die produktive `susi_config.yaml` und überschrieb damit die Defaults für ALLE Modi (stiller Bug). Die Lösung speichert die Einstellungen jetzt pro Chat in `chat.manuell_settings` (JSONField in der DB), nicht mehr in der YAML. Neue Chats erben die Werte des zuletzt aktiven Chats. Bei `mode="manuell"` werden diese Overrides an `ask_susi()` durchgereicht und der Router übersprungen. Die `susi_config.yaml` bleibt damit unangetastete Single Source of Truth für Defaults und den AUTO-Modus. Ein Thinking-Toggle ist nur im MANUELL-Modus und nur bei Thinking-fähigen Modellen sichtbar (bestimmt durch `available_models[].thinking` in der Config).
+
+**CHUNKING** (vorher „CODING"): definiert, aber noch nicht implementiert. Geplant als Dokument-Aufbereitungsmodus für `ingest.py` — kein Retrieval, eigener System-Prompt.
 
 ---
 
@@ -163,7 +169,7 @@ Ein Modus-Toggle im Chat-Header erlaubt das Umschalten zwischen drei Betriebsmod
 
 Die SUSIpedia wurde am 20. Juni neu strukturiert. Der Ordner `docs/susi/` wurde neu angelegt und enthält die SUSI-eigene Dokumentation, die vorher in `coding/susi/` und im Root-Verzeichnis verstreut war. Die Ordner `coding/` (GMM, HouseOfStocks, StockPredict, Portfolio), `projekte/` (Projektbeschreibungen und Roadmaps), `lernen/` (AI, ML, RAG, Python, JavaScript, DevOps), `job/` (Bewerbung, CV, LinkedIn), `technik/` (Hardware, Tools, Setup), `martin/` (persönliches Profil und `ich_bin_martin.md`), `familie/` und `hobbys/` blieben erhalten oder wurden angepasst.
 
-Nach der Umstrukturierung wurden alle Dateien neu indexiert: 617 Chunks in ChromaDB. Die veraltete `tree.md` wurde gelöscht. Am 06.07. wurden zwei Stale-Duplikate entfernt: `docs/lernen/susi/susiuebersicht.md` und `docs/technik/susi_grenzen_und_roadmap.md`.
+Nach der Umstrukturierung wurden alle Dateien neu indexiert: 617 Chunks in ChromaDB. Die veraltete `tree.md` wurde gelöscht. Zwei Stale-Duplikate wurden beim SUSIpedia-Audit entfernt: `docs/lernen/susi/susiuebersicht.md` am 30.06. (widersprüchliche Altfassung von `docs/susi/susiuebersicht.md`) und `docs/technik/susi_grenzen_und_roadmap.md` am 06.07. (enthielt noch `llama3.1:8b` als aktuelle Konfiguration und wurde im Datumsarithmetik-Test tatsächlich retrieved).
 
 ---
 
@@ -171,17 +177,17 @@ Nach der Umstrukturierung wurden alle Dateien neu indexiert: 617 Chunks in Chrom
 
 Nach Lauf C (Parameter-Optimierung abgeschlossen) verschob sich der Fokus auf die Qualität der neuen Produktiv-Komponenten.
 
-### Lauf D — Router-Tracking (24.06.)
+### Lauf D — Breitenlauf mit RAGAS-Validierung (24.–25.06.)
 
-`evaluator.py` und `analyse_csv.py` wurden um `router_profil` und `router_korrekt` erweitert. Neue CSV-Spalten ermöglichen Router-Accuracy-Auswertung pro Kategorie. Router-Accuracy liegt stabil bei ~70%, die Kategorie `technisch` ist mit 60% die schwächste.
+800 Runs auf der neuen 0–2-Qualitätsskala, mit manuell gesetztem Profil pro Frage. Der Auto-Scorer konnte nur 70.1% der Einträge eindeutig bewerten, 29.9% fielen in die Grauzone (paraphrasierte Antworten mit niedrigem ROUGE-L). Als dritte Bewertungsstufe kam `ragas_scorer.py` dazu: Faithfulness und Answer Relevancy, lokal mit `qwen2.5:7b` und `bge-m3`, ohne OpenAI-Key. RAGAS löste 92.1% der Grauzone auf und deckte auf, dass die scheinbare 18.8%-Fehlerrate bei `lernen` fast vollständig ein Scorer-Artefakt war (real 2.6%). Gesamt nach RAGAS: 97.1% Korrektheit; die Kategorie `technisch` ist hier mit 100% die stärkste — bei manueller Profil-Zuweisung.
 
 ### Lauf E — qwen3 Thinking-Test (27.06.)
 
-293 Fragen × 2 Konfigurationen (thinking=on vs. thinking=off). Ergebnis: 0.011 Punkte Unterschied — statistisch irrelevant. `qwen3:8b` (96.9% Korrektheit) liegt praktisch gleichauf mit `qwen2.5-coder:7b` aus Lauf C (97.1%). Das `thinking`-Flag bringt für SUSIs Anwendungsfälle keinen messbaren Vorteil. `qwen2.5-coder:7b` bleibt primäres Produktionsmodell.
+293 Fragen × 2 Konfigurationen (thinking=on vs. thinking=off). Ergebnis: 0.011 Punkte Unterschied — statistisch irrelevant. `qwen3:8b` (96.9% Korrektheit) liegt praktisch gleichauf mit `qwen2.5-coder:7b` aus Lauf D (97.1%). Das `thinking`-Flag bringt für SUSIs Anwendungsfälle keinen messbaren Vorteil bei höherem Rechenaufwand. `qwen2.5-coder:7b` bleibt primäres Produktionsmodell.
 
-### Lauf F — Doppeltes Rewriting gefunden (27.06.)
+### Lauf F — Erste End-to-End-Router-Evaluation (27.06.)
 
-`ask_susi_eval()` rief intern `ask_susi()` auf — Queries wurden doppelt umgeschrieben. Kostete ~16 Prozentpunkte Korrektheit. Nach Fix: Kategorie `technisch` mit 60% als strukturell schwächste identifiziert. Details: [susi_06_grenzerfahrungen.md — Grenzerfahrung 6](susi_06_grenzerfahrungen.md).
+Der erste Lauf mit dem `--live`-Flag, der die vollständige Pipeline inklusive `router.py` testet statt das Profil manuell zu setzen. Neu sind die CSV-Spalten `router_profil` und `router_korrekt`. Im ersten Durchlauf (F1) fiel ein Bug auf: `ask_susi_eval()` rief intern `ask_susi()` auf — Queries wurden doppelt umgeschrieben. Kostete 16.3 Prozentpunkte (F1 76.2% → F2 92.5% nach Fix). Zwei Befunde, die manuelle Läufe nicht liefern konnten: Router-Accuracy stabil bei ~70% (Live-Router 92.5% vs. 97.1% bei manueller Zuweisung, −4.6 Prozentpunkte), und `technisch` mit 60% als strukturell schwächste Kategorie — anders als in Lauf D, weil RAGAS hier mit dem echten Live-`kontext_text` arbeitet und reale Wissenslücken in `docs/technik/` aufdeckt. Details: [susi_06_grenzerfahrungen.md — Grenzerfahrung 6](susi_06_grenzerfahrungen.md).
 
 ---
 
@@ -189,7 +195,7 @@ Nach Lauf C (Parameter-Optimierung abgeschlossen) verschob sich der Fokus auf di
 
 ### ValueCheck (06.07.)
 
-`tools/evaluation/valuecheck.py` — deterministischer Pre-Check für numerische Korrektheit. Extrahiert Zahlen, Daten und Wochentage aus Referenz und Antwort und vergleicht direkt, bevor BERTScore und ROUGE-L berechnet werden. Läuft zwischen Ausweich-Check und ROUGE/BERT-Baum. Wochentage DE/EN als Enum, deutsche Zahlwörter 2–12 (ein/eine ausgenommen wegen Artikel-Kollision), Jahres-Erkennung nur 1990–2035. Rollout-Schalter `VALUECHECK_HART`: True=Score 0 hart, False=Grauzone.
+`tools/evaluation/valuecheck.py` — deterministischer Pre-Check für numerische Korrektheit. Extrahiert Zahlen, Daten und Wochentage aus Referenz und Antwort und vergleicht direkt, bevor BERTScore und ROUGE-L berechnet werden. Läuft zwischen Ausweich-Check und ROUGE/BERT-Baum. Wochentage DE/EN als Enum, deutsche Zahlwörter 2–12 (ein/eine ausgenommen wegen Artikel-Kollision), Jahres-Erkennung nur 1990–2035. Rollout-Schalter `VALUECHECK_HART`: True=Wertefehler hart als Diagnostic Score 1 (→ Quality 0), False=Grauzone an RAGAS/Haiku.
 
 ### Referenz-Loader (06.07.)
 
@@ -211,7 +217,7 @@ Die Query-Pipeline hat eine neue erste Stufe: einen deterministischen Tool-Use-G
 
 ### Integration in query.py
 
-`ask_susi()` bekommt einen `mode`-Parameter (Default `"auto"`). Der agent_datum-Guard ist aktiv bei `mode="auto"` UND `lang="de"`. Der `mode`-Parameter behebt gleichzeitig den 500-Fehler `TypeError: ask_susi() got an unexpected keyword argument 'mode'` der beim Frontend-Toggle auftrat.
+`ask_susi()` bekommt einen `mode`-Parameter (Default `"auto"`). Der agent_datum-Guard ist aktiv bei `mode="auto"` und `mode="manuell"`, jeweils nur bei `lang="de"`. Der `mode`-Parameter behebt gleichzeitig den 500-Fehler `TypeError: ask_susi() got an unexpected keyword argument 'mode'` der beim Frontend-Toggle auftrat.
 
 ### Ergebnis
 
@@ -238,7 +244,7 @@ Frage rein
 
 ## Lauf C — Ergebnisse (18.–20.06.2026)
 
-Lauf C umfasste 293 Fragen, 20 Parameterkombinationen und 5.860 Runs.
+Lauf C umfasste 293 Fragen, 20 Parameterkombinationen und 5.860 Runs. Alle Ø-Scores unten liegen auf der damals aktiven **Quality-Rohskala 0–3** (Vorgänger der heutigen 0–2-Skala, nicht zu verwechseln mit der 0–5-Diagnostic-Skala) und sind nicht direkt mit den späteren Läufen D/E/F vergleichbar. Details: Kapitel 04.
 
 ### Konfigurationsvergleich
 
