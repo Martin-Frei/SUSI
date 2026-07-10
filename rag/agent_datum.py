@@ -83,6 +83,43 @@ ENTITAETEN = {
 }
 
 
+# ── Zweig 2 — Laufzeit-Whitelist ─────────────────────────────────
+# Entitäten für die "wie alt / wie lange / seit wann" sinnvoll ist.
+# Typ "projekt"  → Startdatum im Chunk erwartet → Laufzeit in Monaten/Jahren
+# Typ "person"   → Geburtsdatum im Chunk erwartet → Alter in Jahren
+# Nur diese Entitäten lösen Zweig 2 aus — alles andere → LLM+RAG.
+
+LAUFZEIT_ENTITAETEN: dict[str, str] = {
+    # Projekte
+    "susi":          "projekt",
+    "stockpredict":  "projekt",
+    "spv2":          "projekt",
+    "gmm":           "projekt",
+    "houseofstacks": "projekt",
+    "hos":           "projekt",
+    # Personen
+    "martin":        "person",
+    "jakob":         "person",
+    "adeena":        "person",
+    "tanveer":       "person",
+}
+
+DAUER_MUSTER = [
+    re.compile(r"\bwie\s+alt\b",   re.IGNORECASE),
+    re.compile(r"\bseit\s+wann\b", re.IGNORECASE),
+    re.compile(r"\bwie\s+lange\b", re.IGNORECASE),
+    re.compile(r"\bwie\s*viele?\s+(monate?|jahre?)\b", re.IGNORECASE),
+]
+
+# SUSIpedia-Metadaten-Keywords — diese Zeilen enthalten Dokumentdaten,
+# keine inhaltlichen Startdaten. Werden in berechne_laufzeit_aus_chunk()
+# vor _parse_datum() herausgefiltert.
+CHUNK_FILTER_MUSTER = [
+    re.compile(r"^Datum:[^\n]*\n?",          flags=re.MULTILINE),  # Header: Datum: YYYY-MM-DD
+    re.compile(r"##\s*\*\*Stand[^\n]*\n?"),                        # Footer: ## **Stand DD.MM.YYYY**
+]
+
+
 # ── Bedingung 1 — Datums-Erkennung ────────────────────────────────
 
 DATUM_MUSTER = [
@@ -216,33 +253,37 @@ def _parse_datum(text: str) -> list[date]:
             treffer.append(date(y, mo, d))
         except ValueError:
             pass
-        
+
     # Ohne Jahr: "29. November" / "29.11." → nächstes Vorkommen
     for m in re.finditer(
         r"\b(\d{1,2})\.\s*(" + "|".join(MONAT_ZU_NUM.keys()) + r")\b",
         text, re.IGNORECASE
     ):
         d, mo = int(m.group(1)), MONAT_ZU_NUM[m.group(2).lower()]
+        # Skip wenn Tag+Monat bereits durch Jahr-Variante gefunden
+        if any(t.day == d and t.month == mo for t in treffer):
+            continue
         y = date.today().year
         try:
             candidate = date(y, mo, d)
             if candidate < date.today():
                 candidate = date(y + 1, mo, d)
-            if candidate not in treffer:  # kein Duplikat wenn Jahr-Variante schon gefunden
-                treffer.append(candidate)
+            treffer.append(candidate)
         except ValueError:
             pass
 
     for m in re.finditer(r"(?<!\d)(\d{1,2})\.(\d{1,2})\.(?!\d)", text):
         d, mo = int(m.group(1)), int(m.group(2))
         if 1 <= d <= 31 and 1 <= mo <= 12:
+            # Skip wenn Tag+Monat bereits gefunden
+            if any(t.day == d and t.month == mo for t in treffer):
+                continue
             y = date.today().year
             try:
                 candidate = date(y, mo, d)
                 if candidate < date.today():
                     candidate = date(y + 1, mo, d)
-                if candidate not in treffer:
-                    treffer.append(candidate)
+                treffer.append(candidate)
             except ValueError:
                 pass
 
@@ -353,11 +394,88 @@ def beantworte_kalenderfrage(text: str, heute: Optional[date] = None) -> str:
         return (f"Heute ist der {_formatiere(heute)}. Bis zum "
                 f"{_formatiere(d)} sind es {diff} Tage.")
 
-    # Fallback — sollte selten passieren wenn ist_kalenderfrage sauber
-    # klassifiziert hat. Wir geben ehrlich zurück dass der Agent
-    # zwar zuständig wäre, das Muster aber nicht kennt.
+    # Fallback
     return ("Diese Kalenderfrage kann ich noch nicht deterministisch "
             "beantworten (Muster nicht erkannt). Bitte umformulieren.")
+
+
+# ── Zweig 2 — öffentliche API ────────────────────────────────────
+
+def ist_laufzeitfrage(text: str) -> Optional[str]:
+    """Gibt den Entitätsnamen zurück wenn Zweig 2 greifen soll, sonst None.
+    Bedingungen: Dauer-Keyword in der Frage UND Entität aus LAUFZEIT_ENTITAETEN.
+    Zweig 1 hat Vorrang — diese Funktion nur aufrufen wenn ist_kalenderfrage() False."""
+    if not text or len(text) > 500:
+        return None
+    if not any(m.search(text) for m in DAUER_MUSTER):
+        return None
+    t = text.lower()
+    for e in LAUFZEIT_ENTITAETEN:
+        if re.search(rf"\b{re.escape(e)}\b", t):
+            return e
+    return None
+
+
+def berechne_laufzeit_aus_chunk(frage: str, chunk: str,
+                                 heute: Optional[date] = None) -> Optional[str]:
+    """Extrahiert das Startdatum aus dem Chunk und berechnet die Differenz
+    zu heute deterministisch. Gibt einen fertigen Fakt-Satz zurück der
+    direkt vor den Kontext ins Prompt injiziert wird.
+    Gibt None zurück wenn kein Datum im Chunk gefunden wurde → LLM+RAG normal.
+
+    Typ "person"  → Alter in Jahren
+    Typ "projekt" → Laufzeit in Monaten, ab 24+ Monaten in Jahren + Monate
+
+    Chunk-Filterung: SUSIpedia-Metadaten (Datum:-Header, Stand-Footer) werden
+    vor dem Parsen entfernt — nur inhaltliche Datumsangaben werden verwendet.
+    """
+    if heute is None:
+        heute = date.today()
+
+    # Metadaten-Zeilen rausfiltern — nur inhaltliche Datumsangaben verwenden.
+    # "Datum: YYYY-MM-DD" ist das Dokumentdatum (nicht das Startdatum).
+    # "## **Stand DD.MM.YYYY**" ist das letzte Bearbeitungsdatum (SUSIpedia-Konvention).
+    chunk_clean = chunk
+    for f in CHUNK_FILTER_MUSTER:
+        chunk_clean = f.sub("", chunk_clean)
+
+    daten = _parse_datum(chunk_clean)
+    if not daten:
+        return None
+
+    # Ältestes Datum in der Vergangenheit = Startdatum
+    daten_vergangen = [d for d in daten if d <= heute]
+    if not daten_vergangen:
+        return None
+    d = min(daten_vergangen)
+
+    diff_tage   = (heute - d).days
+    diff_monate = (heute.year - d.year) * 12 + (heute.month - d.month)
+    if heute.day < d.day:
+        diff_monate -= 1
+    diff_jahre  = diff_monate // 12
+    rest_monate = diff_monate % 12
+
+    entitaet = ist_laufzeitfrage(frage) or "die genannte Entität"
+    typ       = LAUFZEIT_ENTITAETEN.get(entitaet, "projekt")
+    t         = frage.lower()
+
+    if typ == "person":
+        if "monat" in t:
+            fakt = f"{diff_monate} Monate ({diff_jahre} Jahre und {rest_monate} Monate)"
+        else:
+            fakt = f"{diff_jahre} Jahre alt"
+        return (f"HINWEIS: Die folgende Angabe wurde deterministisch berechnet und ist korrekt. "
+                f"{entitaet} wurde am {_formatiere(d)} geboren, das sind heute {fakt}. "
+                f"Verwende diese Angabe in deiner Antwort.")
+    else:
+        if diff_monate < 24:
+            fakt = f"{diff_monate} Monate"
+        else:
+            fakt = f"{diff_jahre} Jahre und {rest_monate} Monate"
+        return (f"HINWEIS: Die folgende Angabe wurde deterministisch berechnet und ist korrekt. "
+                f"{entitaet} läuft seit {_formatiere(d)}, das sind heute {fakt} "
+                f"({diff_tage} Tage). Verwende diese Angabe in deiner Antwort.")
 
 
 # ── Standalone ────────────────────────────────────────────────────
@@ -418,4 +536,3 @@ if __name__ == "__main__":
               f"{llm} → LLM+RAG")
     else:
         parser.print_help()
-        
