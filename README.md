@@ -1,7 +1,7 @@
 # SUSI — Selbständige und Schlaue Intelligenzbestie
 
 > Vollständig lokaler, DSGVO-konformer KI-Assistent mit RAG-Wissensbasis.  
-> Kein einziges Byte verlässt den lokalen Rechner.
+> Persönliche Daten verlassen niemals den lokalen Rechner.
 
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Django](https://img.shields.io/badge/Django-092E20?style=for-the-badge&logo=django&logoColor=white)
@@ -15,9 +15,13 @@
 
 ## Was ist SUSI?
 
-SUSI ist ein persönlicher KI-Assistent der vollständig lokal läuft — keine Cloud, keine externen APIs, keine Datenweitergabe. Die Wissensbasis heißt **SUSIpedia**: eine wachsende Sammlung von Markdown-Dateien mit Projekten, Lernnotizen und persönlichem Kontext.
+SUSI ist ein persönlicher KI-Assistent der vollständig lokal läuft — keine Cloud, keine Datenweitergabe. Die Wissensbasis heißt **SUSIpedia**: eine wachsende Sammlung von Markdown-Dateien mit Projekten, Lernnotizen und persönlichem Kontext.
 
 Das System kombiniert **Retrieval-Augmented Generation (RAG)** mit lokalen LLMs über Ollama. SUSIpedia ist der eigentliche Kern — SUSI ist modell-agnostisch und funktioniert mit jedem Ollama-Modell.
+
+SUSI entstand aus einer einfachen Überzeugung: Ein persönlicher Assistent der alles über mich weiß gehört nicht in die Cloud. Deshalb läuft alles lokal — die spannende Ingenieursfrage ist, wie viel Qualität man aus 7B-Modellen auf Consumer-Hardware herausholen kann. Antwort: 97%.
+
+**Einzige Ausnahme:** Die Britannica-Integration (Stufe 1.3) ruft kuratierte Enzyklopädie-Artikel per API ab — ausgehende Anfragen enthalten nur den Themennamen, nie persönliche Daten. Das Wissen wird lokal indexiert.
 
 ---
 
@@ -83,6 +87,7 @@ Das Herzstück von SUSI: Nicht Keyword-Matching sondern die **SUSIpedia-Ordnerst
 | lernen | llama3.1:8b | Lernmaterial, Konzepte |
 | persoenlich | qwen2.5:7b | Persönliches, Job |
 | technik | qwen2.5-coder:7b | Hardware, Tools |
+| wissen | geplant | Britannica-Wissensbasis |
 
 ---
 
@@ -120,6 +125,7 @@ SUSI hat ein vollständiges RAG-Evaluierungs-Framework unter `tools/evaluation/`
 | Wissensbasis | SUSIpedia – Markdown-Dateien, 617+ Chunks |
 | Konfiguration | `susi_config.yaml` – Single Source of Truth |
 | Tool Use | `agent_datum.py` – deterministisch, 0.001s |
+| Performance | `keep_alive: 300` — Modelle bleiben 5 Min. im VRAM, kein 40s Cold-Start |
 
 **Hardware:** AMD Ryzen 9 5900X · 32 GB RAM · RTX 4070 12 GB VRAM
 
@@ -138,7 +144,7 @@ Der erste Satz jedes `##` Abschnitts muss den vollständigen Kontext enthalten
 damit der Chunk ohne das restliche Dokument verständlich ist.
 
 ```
-❌   Isolation Forest => contamination=0.05, n_estimators=100
+❌  contamination=0.05, n_estimators=100
 ✅  Der Isolation Forest verwendet eine Contamination von 0.05
     was einer erwarteten Anomalierate von 5 Prozent entspricht.
 ```
@@ -149,8 +155,8 @@ damit der Chunk ohne das restliche Dokument verständlich ist.
 
 ### 1. Repository klonen
 ```powershell
-git clone https://github.com/Martin-Frei/SUSI_neu.git
-cd SUSI_neu
+git clone https://github.com/Martin-Frei/SUSI.git
+cd SUSI
 ```
 
 ### 2. venv erstellen und aktivieren
@@ -191,9 +197,9 @@ SUSI/
 │   ├── job/                     ← Bewerbungen, CV, LinkedIn
 │   ├── martin/                  ← Persönliches Profil
 │   ├── technik/                 ← Hardware, Tools, RAG-Einstellungen
+│   ├── wissen/                  ← Britannica Wissensbasis (in Aufbau)
 │   ├── familie/                 ← Familiäre Kontexte
 │   └── hobbys/                  ← Interessen
-│   ├── wissen/                  ← Britannica Wissensbasis (in Aufbau)
 ├── rag/
 │   ├── query.py                 ← Produktions-Pipeline
 │   ├── router.py                ← Retrieval-getriebener Profil-Router
@@ -240,8 +246,8 @@ Vollständiges Second Brain · LangChain Agents · eigenständiges Handeln.
 
 - Vollständig lokal, keine Cloud-Abhängigkeiten
 - Festplatte verschlüsselt via BitLocker
-- Keine Telemetrie, keine externen API-Calls
-- Lokale Fonts, kein externer Request
+- Keine Telemetrie · einziger externer Call: Britannica API (nur Themennamen, opt-in)
+- Lokale Fonts, kein externer Request im Frontend
 
 ---
 
@@ -249,7 +255,7 @@ Vollständiges Second Brain · LangChain Agents · eigenständiges Handeln.
 
 | Projekt | Beschreibung |
 |---|---|
-| **StockPredict V2** | LSTM + XGBoost Aktienvorhersage, deployed auf Railway |
+| **StockPredict V2** | LSTM + XGBoost Ensemble für 12 US-Bank-Aktien, deployed auf Railway |
 | **Global Market Mood** | Sentiment-Analyse globaler Finanznachrichten (160+ RSS Feeds, 4.000+ Artikel/Stunde) |
 | **HouseOfStocks** | FinTech Portfolio-Dashboard mit Django + Supabase |
 
