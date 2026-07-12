@@ -1,4 +1,4 @@
-# SUSI – Selbständige und Schlaue Intelligenzbestie
+# SUSI — Selbständige und Schlaue Intelligenzbestie
 
 > Vollständig lokaler, DSGVO-konformer KI-Assistent mit RAG-Wissensbasis.  
 > Kein einziges Byte verlässt den lokalen Rechner.
@@ -9,30 +9,98 @@
 ![Ollama](https://img.shields.io/badge/Ollama-000000?style=for-the-badge&logoColor=white)
 ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=for-the-badge&logoColor=white)
 
+**97% Antwort-Korrektheit · 5.860 automatisierte Eval-Runs · 0.001s deterministisch statt 8s LLM-Halluzination**
+
 ---
 
 ## Was ist SUSI?
 
-SUSI ist ein persönlicher KI-Assistent der komplett lokal läuft — keine Cloud, keine externen APIs, keine Datenweitergabe. Die Wissensbasis heißt **SUSIpedia**: eine wachsende Sammlung von Markdown-Dateien die Martins Projekte, Lernnotizen, Code-Kontext und persönliche Informationen enthält.
+SUSI ist ein persönlicher KI-Assistent der vollständig lokal läuft — keine Cloud, keine externen APIs, keine Datenweitergabe. Die Wissensbasis heißt **SUSIpedia**: eine wachsende Sammlung von Markdown-Dateien mit Projekten, Lernnotizen und persönlichem Kontext.
 
-Das System kombiniert **Retrieval-Augmented Generation (RAG)** mit lokalen LLMs über Ollama. SUSIpedia ist der eigentliche Kern — das System ist modell-agnostisch und funktioniert mit jedem Ollama-Modell.
+Das System kombiniert **Retrieval-Augmented Generation (RAG)** mit lokalen LLMs über Ollama. SUSIpedia ist der eigentliche Kern — SUSI ist modell-agnostisch und funktioniert mit jedem Ollama-Modell.
 
 ---
 
-## Query Rewriting in Action
+## SUSI in Action
 
-![SUSI Chat](screenshots/SUSI_Chat.jpg)
+![SUSI Chat Screenshot](screenshots/SUSI_Chat.jpg)
 
-Der Screenshot zeigt die Entwicklung der Antwortqualität durch Query Rewriting und SUSIpedia-Optimierung:
+Drei Fragen, drei unterschiedliche Mechanismen:
 
-| Frage | Ergebnis | Tokens |
+| Frage | Mechanismus | Zeit | Antwort |
+|---|---|---|---|
+| „Wie alt ist SUSI?" | Zweig 2: Datum aus Chunk, Python rechnet | 6.69s | SUSI ist 3 Monate (114 Tage) alt ✅ |
+| „Wie viele Tage bis zum 29. November?" | Zweig 1: Python datetime direkt | **0.001s** | 140 Tage ✅ |
+| „Wieviele Tage bis zu Martin Geburtstag?" | Zweig 1: Geburtstags-Anker, Python | **0.001s** | 140 Tage ✅ |
+
+**Was das bedeutet:** Datumsfragen werden nicht mehr dem LLM überlassen — LLMs halluzinieren bei Rechenaufgaben strukturell. Python datetime ist deterministisch. Der `agent_datum` fängt diese Fragen ab bevor das LLM sie falsch beantworten kann.
+
+---
+
+## Kernarchitektur
+
+```
+Frage rein
+     ↓
+Spracherkennung (ISO 639-1, LLM-Call, ~0.1s)
+     ↓
+agent_datum Guard ──── Kalenderfrage? ────► Python datetime → Antwort (~0.001s)
+     │ nein
+     ▼
+Query Rewriting (Coreference-Auflösung, letzte 2 Q/A)
+     ↓
+ChromaDB Retrieval (bge-m3, top-k Chunks)
+     ↓
+bge-reranker-v2-m3 (Top-n behalten)
+     ↓
+agent_datum Zweig 2 ── Laufzeitfrage? ───► Datum aus Chunk, Python rechnet
+     │ nein                                 Fakt ins Prompt injiziert
+     ▼
+Retrieval-getriebener Router
+     ↓
+LLM generiert Antwort (qwen2.5-coder:7b / llama3.1:8b / qwen2.5:7b)
+     ↓
+Frontend (Django + HTMX, tok/s + Quelldateien)
+```
+
+---
+
+## Retrieval-getriebener Router
+
+Das Herzstück von SUSI: Nicht Keyword-Matching sondern die **SUSIpedia-Ordnerstruktur selbst** bestimmt welches LLM und welche Parameter genutzt werden.
+
+```python
+# Beispiel Voting (reranker-score-gewichtet):
+# Chunk 1 (score=0.92) aus docs/coding/  → projekte: 0.92
+# Chunk 2 (score=0.71) aus docs/lernen/  → lernen:   0.71
+# Chunk 3 (score=0.68) aus docs/lernen/  → lernen:  +0.68 = 1.39  ← Gewinner
+```
+
+| Profil | LLM | Einsatz |
 |---|---|---|
-| "Hallo SUSI Ich bin Martin Wo wohne ich??" | ❌ Falsch — verweist auf Wohnungssuche-Kategorie | 76 |
-| "Wo wohnt Martin Freimuth??" | ✅ Richtig — 3. Person direkt | 13 |
-| "Ich bin Martin. Wo wohne ich" | ✅ Richtig — dank `ich_bin_martin.md` | 23 |
-| "Ich bin Martin wo wohne ich ??" | ✅ Richtig — Query Rewriting + Reranker | 25 |
+| susi | qwen2.5-coder:7b | SUSI-Selbstwissen |
+| projekte | qwen2.5-coder:7b | Code-Projekte |
+| lernen | llama3.1:8b | Lernmaterial, Konzepte |
+| persoenlich | qwen2.5:7b | Persönliches, Job |
+| technik | qwen2.5-coder:7b | Hardware, Tools |
 
-**Erkenntnis:** Query Rewriting schreibt Ich-Form Fragen automatisch in optimale Suchanfragen um. Kürzere Antworten, höhere Präzision, korrekte Profil-Auswahl durch den Router.
+---
+
+## Evaluation Framework
+
+SUSI hat ein vollständiges RAG-Evaluierungs-Framework unter `tools/evaluation/`:
+
+**Vier-Stufen-Pipeline:** Auto-Scorer (Diagnostic Scale 0–5) → ValueCheck (deterministische Zahlen/Datums-Prüfung) → RAGAS (Grauzonen) → Haiku-Judge (verbleibende Unklarheiten)
+
+### Ergebnisse
+
+| Lauf | Fragen | Runs | Ergebnis | Highlight |
+|---|---|---|---|---|
+| Lauf D | 293 | 800 | **97.1% Korrektheit** | bge-reranker-v2-m3 vs. amberoad: 97% vs. 59% |
+| Lauf E | 293 | 586 | 96.9% (qwen3:8b) | Thinking=on vs. off: 0.011 Punkte Unterschied |
+| Lauf F | 293 | 293 | Bug gefunden | Doppeltes Rewriting kostete 16 Prozentpunkte |
+
+**Wichtigste Erkenntnis:** Die größte Qualitätsverbesserung kam nicht durch Modell-Tuning sondern durch bessere Dokumentstruktur — Retrieval Hit Rate von **36% auf 91%** allein durch SUSIpedia-Formatierung und Chunk-Size-Erhöhung.
 
 ---
 
@@ -42,51 +110,37 @@ Der Screenshot zeigt die Entwicklung der Antwortqualität durch Query Rewriting 
 |---|---|
 | Backend | Django |
 | Frontend | HTMX |
-| LLM (primär) | Ollama – `qwen2.5-coder:7b` |
-| LLM (sekundär) | Ollama – `llama3.1:8b` |
+| LLM primär | Ollama – `qwen2.5-coder:7b` |
+| LLM sekundär | Ollama – `llama3.1:8b`, `qwen2.5:7b` |
+| LLM optional | `qwen3:8b`, `qwen3:14b` (Thinking-Modus) |
 | Embeddings | `BAAI/bge-m3` |
 | Reranker | `BAAI/bge-reranker-v2-m3` |
 | Vector Store | ChromaDB (lokal) |
-| Orchestrierung | LangChain (Retrieval + Chunking) |
-| Wissensbasis | SUSIpedia – 41+ Markdown Files, 617 Chunks |
+| Orchestrierung | LangChain |
+| Wissensbasis | SUSIpedia – Markdown-Dateien, 617+ Chunks |
 | Konfiguration | `susi_config.yaml` – Single Source of Truth |
+| Tool Use | `agent_datum.py` – deterministisch, 0.001s |
 
 **Hardware:** AMD Ryzen 9 5900X · 32 GB RAM · RTX 4070 12 GB VRAM
 
 ---
 
-## Projektstruktur
+## SUSIpedia — Philosophie
 
 ```
-SUSI/
-├── docs/                        ← SUSIpedia Wissensbasis
-│   ├── susi/                    ← SUSI selbst (Architektur, Vision, Evaluation)
-│   ├── coding/                  ← Projekte: GMM, StockPredict, HouseOfStocks, Portfolio
-│   ├── lernen/                  ← AI, ML, RAG, Python, HTMX, DevOps, ...
-│   ├── projekte/                ← Projektdokumentation, Roadmaps
-│   ├── job/                     ← Jobsuche, Bewerbungen, CV, LinkedIn
-│   ├── martin/                  ← Persönliches Profil, Werte, Ziele
-│   ├── technik/                 ← Hardware, Tools, Setup
-│   ├── familie/                 ← Familiäre Kontexte
-│   └── hobbys/                  ← Interessen, Freizeit
-├── rag/
-│   ├── ingest.py                ← Markdown → ChromaDB (Upsert mit MD5-Hash)
-│   ├── query.py                 ← Query Rewriting → Retrieval → Reranker → Router → LLM → Antwort
-│   ├── router.py                ← Retrieval-getriebener Profil-Router
-│   └── susi_config.yaml         ← Alle Parameter zentral (inkl. Router-Profile)
-├── core/                        ← Django App (Views, URLs, Templates)
-├── susi_project/                ← Django Settings
-├── tools/
-│   └── evaluation/              ← RAG Evaluation Framework
-│       ├── grid_run.py          ← Grid Search über alle Parameterkombinationen
-│       ├── evaluator.py         ← BERTScore + ROUGE-L Metriken
-│       ├── auto_scorer.py       ← Automatische Bewertung (0–3 Skala)
-│       ├── retrieval_check.py   ← Hit Rate Messung
-│       ├── eval_meta.py         ← Metadaten pro Run
-│       ├── analyse_csv.py       ← Ergebnisanalyse
-│       └── results/             ← CSV Ergebnisse
-├── chroma_db/                   ← Lokale Vektordatenbank
-└── manage.py
+Eine .md Datei    = Ein klar abgegrenztes Thema
+Ein ## Abschnitt  = Wird zu eigenem ChromaDB-Chunk
+Max 3 Ebenen      = Lebensbereich → Projekt → Aspekt
+```
+
+**Wichtigste Regel:** Immer vollständige Sätze statt kompakter Listen.
+Der erste Satz jedes `##` Abschnitts muss den vollständigen Kontext enthalten
+damit der Chunk ohne das restliche Dokument verständlich ist.
+
+```
+❌   Isolation Forest => contamination=0.05, n_estimators=100
+✅  Der Isolation Forest verwendet eine Contamination von 0.05
+    was einer erwarteten Anomalierate von 5 Prozent entspricht.
 ```
 
 ---
@@ -123,143 +177,71 @@ python rag/ingest.py
 python manage.py runserver
 ```
 
-### Alles neu indexieren (Reset)
-```powershell
-Remove-Item -Recurse -Force chroma_db\
-python rag/ingest.py
-```
-
 ---
 
-## Wie die RAG-Pipeline funktioniert
+## Projektstruktur
 
 ```
-Frage eingeben
-     ↓
-Query Rewriting — LLM schreibt Frage in optimale Suchanfrage um
-("Ich bin Martin. Wo wohne ich?" → "Wo wohnt Martin Freimuth?")
-     ↓
-Embedding (bge-m3) → ChromaDB: Top-k ähnliche Chunks (similarity oder MMR)
-     ↓
-bge-reranker-v2-m3: Chunks neu sortieren → Top-n behalten
-     ↓
-Router: Ordnerpfad der Top-Chunks bestimmt Profil (LLM + Parameter)
-     ↓
-Chunks + Original-Frage + System Prompt → Ollama LLM
-     ↓
-Antwort + Quellen + tok/s Metriken → Django/HTMX Frontend
+SUSI/
+├── docs/                        ← SUSIpedia Wissensbasis
+│   ├── susi/                    ← SUSI-Eigendokumentation
+│   ├── coding/                  ← GMM, StockPredict, HouseOfStacks, Portfolio
+│   ├── lernen/                  ← AI, ML, RAG, Python, JS, DevOps
+│   ├── projekte/                ← Projektdokumentation, Roadmaps
+│   ├── job/                     ← Bewerbungen, CV, LinkedIn
+│   ├── martin/                  ← Persönliches Profil
+│   ├── technik/                 ← Hardware, Tools, RAG-Einstellungen
+│   ├── familie/                 ← Familiäre Kontexte
+│   └── hobbys/                  ← Interessen
+│   ├── wissen/                  ← Britannica Wissensbasis (in Aufbau)
+├── rag/
+│   ├── query.py                 ← Produktions-Pipeline
+│   ├── router.py                ← Retrieval-getriebener Profil-Router
+│   ├── agent_datum.py           ← Tool Use: deterministisch Datum/Laufzeit
+│   ├── ingest.py                ← Markdown → ChromaDB (MD5-Hash-Upsert)
+│   └── susi_config.yaml         ← Single Source of Truth
+├── core/                        ← Django App (Views, URLs, Templates)
+├── tools/
+│   └── evaluation/              ← RAG Evaluation Framework
+│       ├── grid_run.py          ← Eval-Runner
+│       ├── auto_scorer.py       ← Diagnostic Scale 0–5 + ValueCheck
+│       ├── valuecheck.py        ← Deterministische Zahlen/Datums-Prüfung
+│       ├── referenz_loader.py   ← Dynamische Referenz-Templates
+│       ├── ragas_scorer.py      ← RAGAS für Grauzonen
+│       └── analyse_csv.py       ← Router-Accuracy + Cross-Tab
+└── manage.py
 ```
-
----
-
-## Retrieval-getriebener Router
-
-Das Herzstück von SUSI: Nicht Keyword-Matching sondern die **SUSIpedia-Ordnerstruktur selbst** bestimmt welches LLM und welche Parameter genutzt werden.
-
-```python
-# Beispiel Voting:
-# Chunk 1 (score=0.92) aus coding/  → projekte: 0.92
-# Chunk 2 (score=0.71) aus lernen/  → lernen:   0.71
-# Chunk 3 (score=0.68) aus lernen/  → lernen:  +0.68 = 1.39  ← Gewinner
-```
-
-| Profil | LLM | top_k | Einsatz |
-|---|---|---|---|
-| susi | qwen2.5-coder:7b | 7 | SUSI-Selbstwissen |
-| projekte | qwen2.5-coder:7b | 7 | Code-Projekte |
-| lernen | llama3.1:8b | 9 | Lernmaterial, Konzepte |
-| persoenlich | qwen2.5-coder:7b | 5 | Persönliches, Job |
-| technik | qwen2.5-coder:7b | 5 | Hardware, Tools |
-
-Profile sind in `susi_config.yaml` definiert und enthalten bereits einen `thinking`-Flag für kommende qwen3-Modelle.
-
----
-
-## SUSIpedia – Philosophie
-
-```
-Eine .md Datei    = Ein klar abgegrenztes Thema
-Ein ## Abschnitt  = Wird zu eigenem ChromaDB-Chunk
-Max 3 Ebenen      = Lebensbereich → Projekt → Aspekt
-```
-
-**Wichtigste Regel:** Immer vollständige Sätze statt kompakter Listen.  
-Kompakte Listen retrieven schlecht — der erste Satz jedes `##` Abschnitts  
-muss den vollständigen Kontext enthalten damit der Chunk ohne das restliche  
-Dokument verständlich ist.
-
-```
-❌  contamination=0.05, n_estimators=100
-✅  Der Isolation Forest verwendet eine Contamination von 0.05
-    was einer erwarteten Anomalierate von 5 Prozent entspricht.
-```
-
----
-
-## Evaluation Framework
-
-SUSI hat ein vollständiges RAG-Evaluierungs-Framework unter `tools/evaluation/`:
-
-```powershell
-# Smoke Test (4 Fragen, schnell)
-python tools/evaluation/grid_run.py --mode smoke --config tools/evaluation/eval_config_lauf_C.yaml
-
-# Full Run (293 Fragen, über Nacht)
-python tools/evaluation/grid_run.py --mode full --config tools/evaluation/eval_config_lauf_C.yaml
-
-# Dry Run (nur Kombinationen anzeigen)
-python tools/evaluation/grid_run.py --dry-run --mode full --config tools/evaluation/eval_config_lauf_C.yaml
-```
-
-### Ergebnisse Lauf C (Juni 2026)
-
-**5.860 automatisierte Runs · 293 Fragen · 20 Parameterkombinationen**
-
-| Konfiguration | Ø Score | Korrekt |
-|---|---|---|
-| k=3, ohne Reranker | 2.97 / 3.0 | 98% |
-| k=7, mit Reranker | 3.01 / 3.0 | **100%** |
-| qwen2.5-coder:7b | 3.02 / 3.0 | 100% |
-| llama3.1:8b | 2.98 / 3.0 | 99% |
-
-**Reranker-Vergleich:**
-
-| Reranker | Korrektheit |
-|---|---|
-| amberoad/bert-multilingual | 59% ❌ |
-| **BAAI/bge-reranker-v2-m3** | **97%** ✅ |
-
-**Wichtigste Erkenntnis:** Die größte Qualitätsverbesserung kam nicht durch Modell-Tuning  
-sondern durch bessere Dokumentstruktur — Hit Rate von 36% auf 91% allein durch  
-SUSIpedia-Formatierung und Chunk-Size-Erhöhung (300 → 1000 Tokens).
 
 ---
 
 ## Roadmap
 
-### Stufe 1 – Coding Assistent (aktiv ✅)
-Lokaler RAG mit Ollama + ChromaDB + LangChain + Django/HTMX.  
-Vollständiges Evaluation Framework. Multilingualer Reranker. Query Rewriting.
+### Stufe 1 – Lokaler RAG-Assistent ✅
+Ollama + ChromaDB + LangChain + Django/HTMX. Vollständiges Eval-Framework. Query Rewriting. Multilingualer Reranker.
 
-### Stufe 2 – Retrieval-getriebener Router (fertig ✅)
-Dynamische Profil-Auswahl basierend auf den retrievten SUSIpedia-Ordnern.  
-Die Wissensbasis-Struktur bestimmt LLM, top_k und Parameter — kein Keyword-Matching.  
-`thinking`-Flag vorbereitet für qwen3-Modelle.
+### Stufe 1.1 – Retrieval-getriebener Router ✅
+Dynamische Profil-Auswahl aus SUSIpedia-Ordnerstruktur. Kein Keyword-Matching.
 
-### Stufe 3 – Physischer Assistent (geplant)
+### Stufe 1.2 – Tool Use / agent_datum ✅
+Deterministischer Guard vor dem LLM. Kalenderfragen in 0.001s statt 8s. Zwei Zweige: direkte Rechnung + Datum aus Chunk.
+
+### Stufe 1.3 – Wissenserweiterung (aktiv)
+Britannica API Integration. Neues Profil `wissen`. agent_britannica als zweites Werkzeug.
+
+### Stufe 2 – Physischer Assistent (geplant)
 Arduino + Raspberry Pi · Sensoren · Smart Home via Home Assistant.
 
-### Stufe 4 – Persönlicher Lebensassistent (Vision)
+### Stufe 3 – Persönlicher Lebensassistent (Vision)
 Vollständiges Second Brain · LangChain Agents · eigenständiges Handeln.
 
 ---
 
 ## Sicherheit & Datenschutz
 
-- Läuft vollständig lokal, keine Cloud-Abhängigkeiten
+- Vollständig lokal, keine Cloud-Abhängigkeiten
 - Festplatte verschlüsselt via BitLocker
 - Keine Telemetrie, keine externen API-Calls
-- Lokale Fonts (keine Google Fonts), kein externer Request
+- Lokale Fonts, kein externer Request
 
 ---
 
@@ -268,25 +250,9 @@ Vollständiges Second Brain · LangChain Agents · eigenständiges Handeln.
 | Projekt | Beschreibung |
 |---|---|
 | **StockPredict V2** | LSTM + XGBoost Aktienvorhersage, deployed auf Railway |
-| **Global Market Mood (GMM)** | Sentiment-Analyse globaler Finanznachrichten (160+ RSS Feeds) |
-| **HouseOfStocks** | Portfolio-Dashboard mit Django + Supabase |
-| **SAP Fraud Detection** | Anomalie-Erkennung für SAP Sales Orders + Email Verification |
+| **Global Market Mood** | Sentiment-Analyse globaler Finanznachrichten (160+ RSS Feeds, 4.000+ Artikel/Stunde) |
+| **HouseOfStocks** | FinTech Portfolio-Dashboard mit Django + Supabase |
 
 ---
 
-## 🇬🇧 English Summary
-
-SUSI is a fully local RAG assistant — no cloud, no external APIs, no data leaving the machine.
-
-**Stack:** Python · Django · HTMX · ChromaDB · Ollama · bge-m3 · bge-reranker-v2-m3 · qwen2.5-coder:7b
-
-**Key results from Evaluation Run C (5,860 automated runs):**
-- 98–100% answer correctness across 293 questions
-- Biggest improvement: document quality (Hit Rate 36% → 91%), not model tuning
-- Wrong reranker actively harmful: amberoad 59% vs bge-reranker-v2-m3 97%
-
-**Architecture:** Query Rewriting → Retrieval (bge-m3) → Reranker (bge-reranker-v2-m3) → Retrieval-driven Router → LLM (qwen2.5-coder:7b / llama3.1:8b)
-
----
-
-*Entwickler: Martin Freimuth · [github.com/Martin-Frei](https://github.com/Martin-Frei) · [martin-freimuth.dev](https://martin-freimuth.dev) · Stand: Juni 2026*
+*Entwickler: Martin Freimuth · [github.com/Martin-Frei](https://github.com/Martin-Frei) · [martin-freimuth.dev](https://martin-freimuth.dev) · Stand: Juli 2026*
