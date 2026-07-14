@@ -1,25 +1,9 @@
 generation:
-  keep_alive: 300
+  keep_alive: 0
   llm_model: llama3.1:8b
   num_ctx: 4096
   system_prompt: praezise_neu
   temperature: 0.0
-# ── Verfügbare Modelle für den MANUELL-Modus ──────────────────────
-# Wird vom Frontend gerendert (Radio-Buttons in der Settings-Sidebar).
-# Neues Modell hinzufügen = neue Zeile hier, kein Template-Edit nötig.
-# thinking: true → Modell unterstützt den Ollama Thinking-Modus,
-# der Thinking-Toggle im Frontend wird für dieses Modell aktiviert.
-available_models:
-- name: qwen2.5-coder:7b
-  thinking: false
-- name: llama3.1:8b
-  thinking: false
-- name: qwen2.5:7b
-  thinking: false
-- name: qwen3:8b
-  thinking: true
-- name: qwen3:14b
-  thinking: true
 ingest:
   chunk_overlap_default: 50
   chunk_overlap_tech: 50
@@ -72,6 +56,14 @@ profiles:
     thinking: false
     top_k: 5
     top_n: 3
+  wissen:
+    algorithm: similarity
+    llm: qwen2.5:7b
+    system_prompt: praezise_hybrid
+    temperature: 0.0
+    thinking: false
+    top_k: 7
+    top_n: 3
 query_rewriting:
   active: true
 reranker:
@@ -96,6 +88,7 @@ router:
     projekte: projekte
     susi: susi
     technik: technik
+    wissen: wissen
 system_prompts:
   praezise_Chain_of_Thought: 'Du bist ein praeziser technischer Assistent fuer die
     RAG Bibliothek von Martin.

@@ -1,0 +1,130 @@
+openapi: 3.0.1
+info:
+  version: 0.0.2
+  title: syndication-service
+  description: >-
+    RESTful webservice built on python, sls, postgres+psycopg2+sqlalchemy, and more!
+    Implements all server-side tasks for https://syndicationservice.eb.com/
+
+servers:
+  - description: production
+    url: /production
+paths:
+  '/articles':
+    get:
+      summary: List of articles
+      tags:
+        - Content
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: articleTypeId
+          in: query
+          description: filter by article type (advanced/high articles is 1, intermediate/middle is 31, primary/elementary is 38,concise is 45, primary UK is 94, and portuguese primary is 108)
+          required: true
+          schema:
+            type: integer
+        - name: categoryId
+          in: query
+          description: filter by subject area (1 is art, 2 is science, 3 is people, 4 is sports, 5 is events, 6 is plants, 7 is places, 8 is technology, 9 is animals)
+          required: false
+          schema:
+            type: integer
+        - name: lastUpdated
+          in: query
+          description: filter by modified date (format is YYYY-MM-DD)
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: page
+          in: query
+          description: page number of results (default is 1...which will return the first 1000 results)
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: list of articles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListArticlePage'
+        '401':
+          description: Unauthorized (if 'x-api-key' is wrong or 'call_limit' reached)
+
+  '/article/{articleId}/xml':
+    get:
+      summary: Article XML content
+      tags:
+        - Content
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: articleId
+          in: path
+          description: articleId
+          required: true
+          schema:
+            type: integer
+          example: 20
+      responses:
+        '200':
+          description: full article content
+        '400':
+          description: Invalid articleId
+        '401':
+          description: Unauthorized (if 'x-api-key' is wrong or 'call_limit' reached)
+
+  '/application/metadata':
+    get:
+      summary: Current application metadata
+      tags:
+        - Info
+      responses:
+        '200':
+          description: metadata
+          content:
+            application/json:
+              schema:
+                type: object
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+  schemas:
+    ListArticlePage:
+      type: object
+      required:
+        - totalCount
+        - articles
+      properties:
+        totalCount:
+          type: integer
+        articles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Article'
+    Article:
+      type: object
+      required:
+        - articleId
+        - title
+        - articleTypeId
+        - lastUpdated
+      properties:
+        articleId:
+          type: integer
+          example: 394863
+        title:
+          type: string
+          example: D-Day
+        articleTypeId:
+          type: integer
+          example: 1
+        lastUpdated:
+          type: string
+          format: date

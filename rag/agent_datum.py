@@ -14,25 +14,28 @@ Kontext (siehe docs/susi/valuecheck_und_referenz_loader.md):
     vorgelegt, sondern direkt in Python berechnet.
 
 Aufruf in rag/query.py (ganz früh, direkt nach detect_language):
-    from rag import datum_agent
-    if datum_agent.ist_kalenderfrage(frage):
-        return datum_agent.beantworte_kalenderfrage(frage)
+    from rag import agent_datum
+    if agent_datum.ist_kalenderfrage(frage):
+        return agent_datum.beantworte_kalenderfrage(frage)
     # ab hier normale Pipeline
 
 Konservative Klassifikation — alle drei Bedingungen müssen gelten:
     1. Konkretes Datum oder Datums-Anker in der Frage
-       (Datum, "heute", "Weihnachten JJJJ", "Silvester JJJJ" usw.)
+       (Datum, "heute", "Weihnachten JJJJ", "Silvester JJJJ",
+        "Martins Geburtstag" usw.)
     2. Klare Kalender-Operation
        (Wochentag, Tage/Wochen/Monate zwischen, +N Tage/Wochen,
         übernächste Woche etc.)
     3. Kein SUSIpedia-Entitätsname
        (SUSI, StockPredict, GMM, HouseOfStacks, HOS, Portfolio,
         Projekt-Namen, mein/meine)
+       Ausnahme: explizites Datum in der Frage → Entität irrelevant.
+       Ausnahme: bekannter Geburtstags-Anker → Entität irrelevant.
 Im Zweifel → LLM+RAG. Der Agent macht nur was er sicher kann.
 
 Standalone-Test:
-    python rag/datum_agent.py --frage "Welcher Wochentag war der 31.12.1999?"
-    python rag/datum_agent.py --demo    # Klassifikation der 10 Testfragen
+    python rag/agent_datum.py --frage "Welcher Wochentag war der 31.12.1999?"
+    python rag/agent_datum.py --demo    # Klassifikation der 10 Testfragen
 """
 
 from __future__ import annotations
@@ -41,7 +44,7 @@ from datetime import date, timedelta
 from typing import Optional
 
 
-# ── Kalender-Grunddaten (aus referenz_loader wiederverwendet) ────
+# ── Kalender-Grunddaten ──────────────────────────────────────────
 
 MONATE_NAMEN = ["", "Januar", "Februar", "März", "April", "Mai", "Juni",
                 "Juli", "August", "September", "Oktober", "November", "Dezember"]
@@ -49,55 +52,52 @@ WOCHENTAG_NAMEN = ["Montag", "Dienstag", "Mittwoch", "Donnerstag",
                    "Freitag", "Samstag", "Sonntag"]
 
 MONAT_ZU_NUM = {n.lower(): i for i, n in enumerate(MONATE_NAMEN) if n}
-MONAT_ZU_NUM.update({"märz": 3, "maerz": 3})  # Alternativschreibung
+MONAT_ZU_NUM.update({"märz": 3, "maerz": 3})
 
-# Bekannte Anker für Datumsangaben ohne explizites Datum in der Frage.
-# Nur Anker deren Datum kalendrisch fest liegt.
-ANKER_TAG_MONAT = {
-    "weihnachten": (25, 12),
-    "heiligabend": (24, 12),
-    "silvester": (31, 12),
-    "neujahr": (1, 1),
+# Feste Kalender-Anker — Datum liegt eindeutig fest.
+# Personen-Geburtstage hier eintragen damit _parse_datum() sie findet.
+ANKER_TAG_MONAT: dict[str, tuple[int, int]] = {
+    "weihnachten":       (25, 12),
+    "heiligabend":       (24, 12),
+    "silvester":         (31, 12),
+    "neujahr":           (1,  1),
+    # Personen-Geburtstage (hard-coded, da deterministisch bekannt)
+    "martin geburtstag": (29, 11),
+    "martins geburtstag":(29, 11),
 }
 
+# Geburtstags-Phrasen als eigenes Regex — Mehrteilige Schlüssel wie
+# "martin geburtstag" können nicht per \b-Wortgrenze in einem
+# einfachen DATUM_MUSTER erkannt werden.
+GEBURTSTAG_MUSTER = re.compile(
+    r"\b(martins?)\s+geburtstag\b", re.IGNORECASE
+)
 
-# ── SUSIpedia-Entitäten (Sperrliste für Bedingung 3) ─────────────
-# Wenn eines dieser Wörter in der Frage steht → LLM+RAG-Pfad,
-# egal wie datumslastig die Frage aussieht.
+
+# ── SUSIpedia-Entitäten (Sperrliste Bedingung 3) ─────────────────
 
 ENTITAETEN = {
-    # Eigene Projekte
     "susi", "stockpredict", "spv2", "sp v2",
     "gmm", "global market mood",
     "houseofstacks", "house of stacks", "hos",
     "portfolio", "portfolio_site",
-    # Personen und Bezüge
     "martin", "tanveer", "adeena",
-    # Persönliche Referenzen
     "mein", "meine", "meinen", "meines", "meiner",
     "ich", "mir", "mich",
-    # Generische Projekt-Wörter — konservative Wahl, damit
-    # "wie lange läuft das Projekt schon?" NICHT auf Python geht
     "projekt", "projekts", "projekte",
     "firma", "team", "kollege", "kollegen",
 }
 
 
 # ── Zweig 2 — Laufzeit-Whitelist ─────────────────────────────────
-# Entitäten für die "wie alt / wie lange / seit wann" sinnvoll ist.
-# Typ "projekt"  → Startdatum im Chunk erwartet → Laufzeit in Monaten/Jahren
-# Typ "person"   → Geburtsdatum im Chunk erwartet → Alter in Jahren
-# Nur diese Entitäten lösen Zweig 2 aus — alles andere → LLM+RAG.
 
 LAUFZEIT_ENTITAETEN: dict[str, str] = {
-    # Projekte
     "susi":          "projekt",
     "stockpredict":  "projekt",
     "spv2":          "projekt",
     "gmm":           "projekt",
     "houseofstacks": "projekt",
     "hos":           "projekt",
-    # Personen
     "martin":        "person",
     "jakob":         "person",
     "adeena":        "person",
@@ -111,31 +111,24 @@ DAUER_MUSTER = [
     re.compile(r"\bwie\s*viele?\s+(monate?|jahre?)\b", re.IGNORECASE),
 ]
 
-# SUSIpedia-Metadaten-Keywords — diese Zeilen enthalten Dokumentdaten,
-# keine inhaltlichen Startdaten. Werden in berechne_laufzeit_aus_chunk()
-# vor _parse_datum() herausgefiltert.
+# SUSIpedia-Metadaten-Zeilen die keine inhaltlichen Startdaten sind.
 CHUNK_FILTER_MUSTER = [
-    re.compile(r"^Datum:[^\n]*\n?",          flags=re.MULTILINE),  # Header: Datum: YYYY-MM-DD
-    re.compile(r"##\s*\*\*Stand[^\n]*\n?"),                        # Footer: ## **Stand DD.MM.YYYY**
+    re.compile(r"^Datum:[^\n]*\n?", flags=re.MULTILINE),
+    re.compile(r"##\s*\*\*Stand[^\n]*\n?"),
 ]
 
 
-# ── Bedingung 1 — Datums-Erkennung ────────────────────────────────
+# ── Bedingung 1 — Datums-Erkennung ───────────────────────────────
 
 DATUM_MUSTER = [
-    # Tag.Monat.Jahr numerisch: 25.12.2026 / 5.3.2026
     re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b"),
-    # Tag. Monat Jahr wörtlich: "25. Dezember 2026" / "31. Dezember 1999"
     re.compile(r"\b(\d{1,2})\.\s*("
                + "|".join(MONAT_ZU_NUM.keys())
                + r")\s+(\d{4})\b", re.IGNORECASE),
-    # "Weihnachten 2026", "Silvester 2026" mit Jahr
-    re.compile(r"\b(" + "|".join(ANKER_TAG_MONAT.keys())
+    re.compile(r"\b(" + "|".join(re.escape(k) for k in ANKER_TAG_MONAT.keys())
                + r")\s+(\d{4})\b", re.IGNORECASE),
-    # NEU: Tag. Monat ohne Jahr: "29. November", "5. März"
     re.compile(r"\b(\d{1,2})\.\s*(" + "|".join(MONAT_ZU_NUM.keys()) + r")\b",
                re.IGNORECASE),
-    # NEU: Tag.Monat. ohne Jahr: "29.11."
     re.compile(r"(?<!\d)(\d{1,2})\.(\d{1,2})\.(?!\d)"),
 ]
 
@@ -145,19 +138,16 @@ HEUTE_MUSTER = re.compile(r"\b(heute|jetzt|aktuell)\b", re.IGNORECASE)
 def _hat_datum_oder_anker(text: str) -> bool:
     if HEUTE_MUSTER.search(text):
         return True
+    if GEBURTSTAG_MUSTER.search(text):
+        return True
     return any(m.search(text) for m in DATUM_MUSTER)
 
 
-# ── Bedingung 2 — Kalender-Operation erkennen ────────────────────
-# Muster reichen bewusst nur wenn eine RECHENOPERATION erkennbar ist.
-# Reine Faktenfragen zu einem Datum ("was war am 20.03. passiert?")
-# fallen bewusst nicht drunter.
+# ── Bedingung 2 — Kalender-Operation ─────────────────────────────
 
 OPERATION_MUSTER = [
     re.compile(r"\bwelcher\s+wochentag\b", re.IGNORECASE),
     re.compile(r"\bwochentag\s+(war|ist|fällt|fiel)\b", re.IGNORECASE),
-    # "wie viele Tage ... seit/bis/zwischen" — Zwischenwörter erlaubt
-    # (sind, liegen, sind es, hat es noch ...)
     re.compile(r"\bwie\s*viele?\s+tage?\b.{0,40}?\b(seit|bis|zwischen|zw\.)\b",
                re.IGNORECASE),
     re.compile(r"\bwie\s*viele?\s+wochen?\b.{0,40}?\b(seit|bis|zwischen|zw\.|noch)\b",
@@ -169,6 +159,8 @@ OPERATION_MUSTER = [
     re.compile(r"\b(nächste|übernächste|naechste|uebernaechste)\s+woche\b",
                re.IGNORECASE),
     re.compile(r"\bab\s+heute\b", re.IGNORECASE),
+    # Geburtstags-Fragen: "wieviele Tage bis zu Martins Geburtstag"
+    re.compile(r"\b(bis\s+zu[mr]?)\b.{0,30}?\bgeburtstag\b", re.IGNORECASE),
 ]
 
 
@@ -179,8 +171,11 @@ def _hat_kalender_operation(text: str) -> bool:
 # ── Bedingung 3 — Keine SUSIpedia-Entität ────────────────────────
 
 def _hat_entitaet(text: str) -> Optional[str]:
-    # Explizites Datum in der Frage → Entität irrelevant, Python kann direkt rechnen
+    # Explizites Datum → Entität egal
     if any(m.search(text) for m in DATUM_MUSTER):
+        return None
+    # Bekannter Geburtstags-Anker → Entität egal
+    if GEBURTSTAG_MUSTER.search(text):
         return None
     t = text.lower()
     for e in ENTITAETEN:
@@ -189,12 +184,10 @@ def _hat_entitaet(text: str) -> Optional[str]:
     return None
 
 
-# ── öffentliche API — Klassifikation ──────────────────────────────
+# ── öffentliche API — Klassifikation ─────────────────────────────
 
 def ist_kalenderfrage(text: str) -> bool:
-    """Konservative Drei-Bedingungen-Klassifikation.
-    True nur wenn alle drei zutreffen. Im Zweifel False."""
-    if not text or len(text) > 500:  # überlange Fragen sind nie reine Kalender
+    if not text or len(text) > 500:
         return False
     if not _hat_datum_oder_anker(text):
         return False
@@ -206,7 +199,6 @@ def ist_kalenderfrage(text: str) -> bool:
 
 
 def diagnose(text: str) -> dict:
-    """Gibt die Klassifikations-Diagnose zurück — für Testing und Debug."""
     return {
         "datum_oder_anker": _hat_datum_oder_anker(text),
         "kalender_operation": _hat_kalender_operation(text),
@@ -215,14 +207,12 @@ def diagnose(text: str) -> dict:
     }
 
 
-# ── Datums-Parser für die Ausführung ─────────────────────────────
+# ── Datums-Parser ─────────────────────────────────────────────────
 
 def _parse_datum(text: str) -> list[date]:
-    """Extrahiert alle Datumsangaben aus dem Text. Reihenfolge:
-    zuerst spezifische Muster (mit Jahr), dann Anker (Weihnachten...)."""
     treffer: list[date] = []
 
-    # Numerisch: 25.12.2026
+    # Numerisch mit Jahr: 25.12.2026
     for m in re.finditer(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b", text):
         d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
         if 1 <= d <= 31 and 1 <= mo <= 12:
@@ -231,7 +221,7 @@ def _parse_datum(text: str) -> list[date]:
             except ValueError:
                 pass
 
-    # Wörtlich: "31. Dezember 1999"
+    # Wörtlich mit Jahr: "31. Dezember 1999"
     for m in re.finditer(
         r"\b(\d{1,2})\.\s*(" + "|".join(MONAT_ZU_NUM.keys()) + r")\s+(\d{4})\b",
         text, re.IGNORECASE
@@ -242,10 +232,10 @@ def _parse_datum(text: str) -> list[date]:
         except ValueError:
             pass
 
-    # Anker: "Weihnachten 2026"
+    # Anker mit Jahr: "Weihnachten 2026"
     for m in re.finditer(
-        r"\b(" + "|".join(ANKER_TAG_MONAT.keys()) + r")\s+(\d{4})\b",
-        text, re.IGNORECASE
+        r"\b(" + "|".join(re.escape(k) for k in ANKER_TAG_MONAT.keys())
+        + r")\s+(\d{4})\b", text, re.IGNORECASE
     ):
         d, mo = ANKER_TAG_MONAT[m.group(1).lower()]
         y = int(m.group(2))
@@ -254,13 +244,26 @@ def _parse_datum(text: str) -> list[date]:
         except ValueError:
             pass
 
-    # Ohne Jahr: "29. November" / "29.11." → nächstes Vorkommen
+    # Geburtstags-Anker ohne Jahr → nächstes Vorkommen
+    if GEBURTSTAG_MUSTER.search(text):
+        key = "martins geburtstag"
+        tag, monat = ANKER_TAG_MONAT[key]
+        y = date.today().year
+        try:
+            candidate = date(y, monat, tag)
+            if candidate < date.today():
+                candidate = date(y + 1, monat, tag)
+            if not any(t.day == tag and t.month == monat for t in treffer):
+                treffer.append(candidate)
+        except ValueError:
+            pass
+
+    # Wörtlich ohne Jahr: "29. November" → nächstes Vorkommen
     for m in re.finditer(
         r"\b(\d{1,2})\.\s*(" + "|".join(MONAT_ZU_NUM.keys()) + r")\b",
         text, re.IGNORECASE
     ):
         d, mo = int(m.group(1)), MONAT_ZU_NUM[m.group(2).lower()]
-        # Skip wenn Tag+Monat bereits durch Jahr-Variante gefunden
         if any(t.day == d and t.month == mo for t in treffer):
             continue
         y = date.today().year
@@ -272,10 +275,10 @@ def _parse_datum(text: str) -> list[date]:
         except ValueError:
             pass
 
+    # Numerisch ohne Jahr: "29.11."
     for m in re.finditer(r"(?<!\d)(\d{1,2})\.(\d{1,2})\.(?!\d)", text):
         d, mo = int(m.group(1)), int(m.group(2))
         if 1 <= d <= 31 and 1 <= mo <= 12:
-            # Skip wenn Tag+Monat bereits gefunden
             if any(t.day == d and t.month == mo for t in treffer):
                 continue
             y = date.today().year
@@ -301,25 +304,20 @@ def _formatiere_kurz(d: date) -> str:
 # ── öffentliche API — Ausführung ──────────────────────────────────
 
 def beantworte_kalenderfrage(text: str, heute: Optional[date] = None) -> str:
-    """Beantwortet eine reine Kalenderfrage deterministisch.
-    Wird nur aufgerufen wenn ist_kalenderfrage() True gesagt hat.
-    heute wird nur für Tests explizit gesetzt."""
     if heute is None:
         heute = date.today()
 
     daten = _parse_datum(text)
     t = text.lower()
 
-    # 1) Wochentag eines konkreten Datums
+    # 1) Wochentag
     if re.search(r"\bwochentag\b", t) and daten:
         d = daten[0]
         verb = "war" if d < heute else "ist"
-        return (f"Der {_formatiere(d)} {verb} ein "
-                f"{WOCHENTAG_NAMEN[d.weekday()]}.")
+        return f"Der {_formatiere(d)} {verb} ein {WOCHENTAG_NAMEN[d.weekday()]}."
 
-    # 2) Tage/Wochen/Monate zwischen zwei Daten
-    m = re.search(r"\bzwischen\b", t)
-    if m and len(daten) >= 2:
+    # 2) Zwischen zwei Daten
+    if re.search(r"\bzwischen\b", t) and len(daten) >= 2:
         d1, d2 = sorted(daten[:2])
         diff = (d2 - d1).days
         if "monat" in t:
@@ -330,81 +328,62 @@ def beantworte_kalenderfrage(text: str, heute: Optional[date] = None) -> str:
                     f"{_formatiere(d2)} liegen {monate} volle Monate.")
         if "woche" in t:
             return (f"Zwischen dem {_formatiere(d1)} und dem "
-                    f"{_formatiere(d2)} liegen {diff // 7} volle Wochen "
-                    f"({diff} Tage).")
-        return (f"Zwischen dem {_formatiere(d1)} und dem "
-                f"{_formatiere(d2)} liegen {diff} Tage.")
+                    f"{_formatiere(d2)} liegen {diff // 7} volle Wochen ({diff} Tage).")
+        return f"Zwischen dem {_formatiere(d1)} und dem {_formatiere(d2)} liegen {diff} Tage."
 
-    # 3) N Tage/Wochen ab heute (in exakt N ...)
-    m = re.search(r"\b(in|nach)\s+(exakt\s+)?(\d+)\s+(tag|tage|woche|wochen)\b",
-                  t)
+    # 3) In N Tage/Wochen
+    m = re.search(r"\b(in|nach)\s+(exakt\s+)?(\d+)\s+(tag|tage|woche|wochen)\b", t)
     if m:
         n = int(m.group(3))
         einheit = m.group(4)
-        delta = n * (7 if einheit.startswith("woche") else 1)
-        ziel = heute + timedelta(days=delta)
-        return (f"Heute ist der {_formatiere(heute)}. "
-                f"In {n} {einheit} ist das der {_formatiere(ziel)}.")
+        ziel = heute + timedelta(days=n * (7 if einheit.startswith("woche") else 1))
+        return f"Heute ist der {_formatiere(heute)}. In {n} {einheit} ist das der {_formatiere(ziel)}."
 
     # 4) Nächste / übernächste Woche
     if re.search(r"\b(übernächste|uebernaechste)\s+woche\b", t):
-        ziel = heute + timedelta(days=14)
-        return (f"Heute ist der {_formatiere(heute)}, ein "
-                f"{WOCHENTAG_NAMEN[heute.weekday()]}. "
+        return (f"Heute ist der {_formatiere(heute)}, ein {WOCHENTAG_NAMEN[heute.weekday()]}. "
                 f"Nächste Woche wäre der {_formatiere(heute + timedelta(days=7))}, "
-                f"übernächste Woche der {_formatiere(ziel)}.")
+                f"übernächste Woche der {_formatiere(heute + timedelta(days=14))}.")
     if re.search(r"\b(nächste|naechste)\s+woche\b", t):
-        ziel = heute + timedelta(days=7)
         return (f"Heute ist der {_formatiere(heute)}. "
-                f"Nächste Woche ist der {_formatiere(ziel)}.")
+                f"Nächste Woche ist der {_formatiere(heute + timedelta(days=7))}.")
 
-    # 5) Wie viele Tage/Wochen/Monate seit einem Datum
-    if re.search(r"\b(wie\s*viele?)\s+(tage?|wochen?|monate?)\b.{0,40}?\bseit\b",
-                 t) and daten:
+    # 5) Seit einem Datum
+    if re.search(r"\b(wie\s*viele?)\s+(tage?|wochen?|monate?)\b.{0,40}?\bseit\b", t) and daten:
         d = daten[0]
         diff = (heute - d).days
         if "monat" in t:
             monate = (heute.year - d.year) * 12 + (heute.month - d.month)
             if heute.day < d.day:
                 monate -= 1
-            return (f"Vom {_formatiere(d)} bis heute ({_formatiere(heute)}) "
-                    f"sind das {monate} volle Monate.")
+            return f"Vom {_formatiere(d)} bis heute ({_formatiere(heute)}) sind das {monate} volle Monate."
         if "woche" in t:
             return (f"Vom {_formatiere(d)} bis heute ({_formatiere(heute)}) "
-                    f"sind {diff // 7} volle Wochen vergangen "
-                    f"({diff} Tage).")
-        return (f"Vom {_formatiere(d)} bis heute ({_formatiere(heute)}) "
-                f"sind {diff} Tage vergangen.")
+                    f"sind {diff // 7} volle Wochen vergangen ({diff} Tage).")
+        return f"Vom {_formatiere(d)} bis heute ({_formatiere(heute)}) sind {diff} Tage vergangen."
 
-    # 6) Wie viele Wochen/Tage/Monate bis zu einem Datum
-    if re.search(r"\b(wie\s*viele?)\s+(tage?|wochen?|monate?)\b.{0,40}?\b"
-                 r"(bis|zu)\b", t) and daten:
+    # 6) Bis zu einem Datum (inkl. Geburtstag)
+    if (re.search(r"\b(wie\s*viele?)\s+(tage?|wochen?|monate?)\b.{0,40}?\b(bis|zu)\b", t)
+            or re.search(r"\b(bis\s+zu[mr]?)\b.{0,30}?\bgeburtstag\b", t)) and daten:
         d = daten[0]
         diff = (d - heute).days
         if "monat" in t:
             monate = (d.year - heute.year) * 12 + (d.month - heute.month)
             if d.day < heute.day:
                 monate -= 1
-            return (f"Heute ist der {_formatiere(heute)}. "
-                    f"Bis zum {_formatiere(d)} sind es {monate} volle Monate.")
+            return f"Heute ist der {_formatiere(heute)}. Bis zum {_formatiere(d)} sind es {monate} volle Monate."
         if "woche" in t:
             return (f"Heute ist der {_formatiere(heute)}. Bis zum "
-                    f"{_formatiere(d)} sind es {diff // 7} volle Wochen "
-                    f"({diff} Tage).")
-        return (f"Heute ist der {_formatiere(heute)}. Bis zum "
-                f"{_formatiere(d)} sind es {diff} Tage.")
+                    f"{_formatiere(d)} sind es {diff // 7} volle Wochen ({diff} Tage).")
+        return f"Heute ist der {_formatiere(heute)}. Bis zum {_formatiere(d)} sind es {diff} Tage."
 
-    # Fallback
     return ("Diese Kalenderfrage kann ich noch nicht deterministisch "
             "beantworten (Muster nicht erkannt). Bitte umformulieren.")
 
 
-# ── Zweig 2 — öffentliche API ────────────────────────────────────
+# ── Zweig 2 — öffentliche API ─────────────────────────────────────
 
 def ist_laufzeitfrage(text: str) -> Optional[str]:
-    """Gibt den Entitätsnamen zurück wenn Zweig 2 greifen soll, sonst None.
-    Bedingungen: Dauer-Keyword in der Frage UND Entität aus LAUFZEIT_ENTITAETEN.
-    Zweig 1 hat Vorrang — diese Funktion nur aufrufen wenn ist_kalenderfrage() False."""
     if not text or len(text) > 500:
         return None
     if not any(m.search(text) for m in DAUER_MUSTER):
@@ -419,22 +398,10 @@ def ist_laufzeitfrage(text: str) -> Optional[str]:
 def berechne_laufzeit_aus_chunk(frage: str, chunk: str,
                                  heute: Optional[date] = None) -> Optional[str]:
     """Extrahiert das Startdatum aus dem Chunk und berechnet die Differenz
-    zu heute deterministisch. Gibt einen fertigen Fakt-Satz zurück der
-    direkt vor den Kontext ins Prompt injiziert wird.
-    Gibt None zurück wenn kein Datum im Chunk gefunden wurde → LLM+RAG normal.
-
-    Typ "person"  → Alter in Jahren
-    Typ "projekt" → Laufzeit in Monaten, ab 24+ Monaten in Jahren + Monate
-
-    Chunk-Filterung: SUSIpedia-Metadaten (Datum:-Header, Stand-Footer) werden
-    vor dem Parsen entfernt — nur inhaltliche Datumsangaben werden verwendet.
-    """
+    zu heute deterministisch. Gibt None zurück wenn kein Datum gefunden."""
     if heute is None:
         heute = date.today()
 
-    # Metadaten-Zeilen rausfiltern — nur inhaltliche Datumsangaben verwenden.
-    # "Datum: YYYY-MM-DD" ist das Dokumentdatum (nicht das Startdatum).
-    # "## **Stand DD.MM.YYYY**" ist das letzte Bearbeitungsdatum (SUSIpedia-Konvention).
     chunk_clean = chunk
     for f in CHUNK_FILTER_MUSTER:
         chunk_clean = f.sub("", chunk_clean)
@@ -443,7 +410,6 @@ def berechne_laufzeit_aus_chunk(frage: str, chunk: str,
     if not daten:
         return None
 
-    # Ältestes Datum in der Vergangenheit = Startdatum
     daten_vergangen = [d for d in daten if d <= heute]
     if not daten_vergangen:
         return None
@@ -461,18 +427,14 @@ def berechne_laufzeit_aus_chunk(frage: str, chunk: str,
     t         = frage.lower()
 
     if typ == "person":
-        if "monat" in t:
-            fakt = f"{diff_monate} Monate ({diff_jahre} Jahre und {rest_monate} Monate)"
-        else:
-            fakt = f"{diff_jahre} Jahre alt"
+        fakt = (f"{diff_monate} Monate ({diff_jahre} Jahre und {rest_monate} Monate)"
+                if "monat" in t else f"{diff_jahre} Jahre alt")
         return (f"HINWEIS: Die folgende Angabe wurde deterministisch berechnet und ist korrekt. "
                 f"{entitaet} wurde am {_formatiere(d)} geboren, das sind heute {fakt}. "
                 f"Verwende diese Angabe in deiner Antwort.")
     else:
-        if diff_monate < 24:
-            fakt = f"{diff_monate} Monate"
-        else:
-            fakt = f"{diff_jahre} Jahre und {rest_monate} Monate"
+        fakt = (f"{diff_jahre} Jahre und {rest_monate} Monate"
+                if diff_monate >= 24 else f"{diff_monate} Monate")
         return (f"HINWEIS: Die folgende Angabe wurde deterministisch berechnet und ist korrekt. "
                 f"{entitaet} läuft seit {_formatiere(d)}, das sind heute {fakt} "
                 f"({diff_tage} Tage). Verwende diese Angabe in deiner Antwort.")
@@ -496,12 +458,9 @@ if __name__ == "__main__":
         print(f"  Entität blockiert     : {d['entitaet'] or '—'}")
         print(f"  → Kalenderfrage?      : {d['ist_kalenderfrage']}")
         if d["ist_kalenderfrage"]:
-            print()
-            print("Antwort:")
-            print(f"  {beantworte_kalenderfrage(args.frage)}")
+            print(f"\nAntwort:\n  {beantworte_kalenderfrage(args.frage)}")
         else:
-            print()
-            print("→ Geht an LLM+RAG-Pipeline.")
+            print("\n→ Geht an LLM+RAG-Pipeline.")
     elif args.demo:
         fragen = [
             ("datum_01", "SUSI ist seit Maerz 2026 in Betrieb. Wie alt ist sie inzwischen?"),
@@ -526,13 +485,10 @@ if __name__ == "__main__":
             print(f"\n{'='*72}")
             print(f"{fid} → {pfad}")
             print(f"  Frage: {f[:80]}")
-            print(f"  Datum={d['datum_oder_anker']}, "
-                  f"Op={d['kalender_operation']}, "
-                  f"Entität={d['entitaet'] or '—'}")
+            print(f"  Datum={d['datum_oder_anker']}, Op={d['kalender_operation']}, Entität={d['entitaet'] or '—'}")
             if d["ist_kalenderfrage"]:
                 print(f"  Antwort: {beantworte_kalenderfrage(f)}")
         print(f"\n{'='*72}")
-        print(f"ZUSAMMENFASSUNG: {py} Fragen → Python-Agent, "
-              f"{llm} → LLM+RAG")
+        print(f"ZUSAMMENFASSUNG: {py} Fragen → Python-Agent, {llm} → LLM+RAG")
     else:
         parser.print_help()
