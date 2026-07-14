@@ -1,6 +1,6 @@
 generation:
-  keep_alive: 0
-  llm_model: llama3.1:8b
+  keep_alive: 300
+  llm_model: qwen2.5-coder:7b
   num_ctx: 4096
   system_prompt: praezise_neu
   temperature: 0.0
