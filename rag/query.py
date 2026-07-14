@@ -204,9 +204,6 @@ Deine EINZIGE Aufgabe ist das Umschreiben. Bewerte den Inhalt NICHT. Lehne KEINE
 - Erfinde KEINE Einheit die in der Ursprungsfrage nicht steht.
   "Wie alt ist SUSI?" bleibt "Wie alt ist SUSI?" — NICHT "Wie viele Jahre/Monate ist SUSI in Betrieb?"
   Die Einheit (Jahre, Monate, Tage) ist Teil der Antwort, nicht der Frage.
-- Projektnamen wie SUSI, GMM, StockPredict, HouseOfStacks, HOS bleiben IMMER unverändert.
-  Ersetze sie NIEMALS durch Personennamen oder andere Begriffe.
-  "Wie alt ist SUSI?" bleibt "Wie alt ist SUSI?" — NICHT "Wie alt ist Martin Freimuth?"
 
 Aktuelle Frage: {question}
 Umgeschrieben:"""
@@ -344,9 +341,9 @@ def ask_susi(question, chat_history: list | None = None, mode: str = "auto",
     # deterministisch beantwortbar egal welches LLM eingestellt ist.
     # Coding = Ingest-Vorbereitung, dort kein Agent.
     # Details zur Klassifikation siehe rag/agent_datum.py.
-    if mode in ("auto", "manuell") and lang == "de" and agent_datum.ist_kalenderfrage(question):
+    if mode in ("auto", "manuell") and lang == "de" and agent_datum.is_calendar_question(question):
         agent_start = time.time()
-        agent_antwort = agent_datum.beantworte_kalenderfrage(question)
+        agent_antwort = agent_datum.answer_calendar_question(question)
         agent_wall = round(time.time() - agent_start, 3)
         print(f"  🧮 agent_datum aktiv — deterministische Antwort ({agent_wall}s)")
         return {
@@ -419,16 +416,16 @@ def ask_susi(question, chat_history: list | None = None, mode: str = "auto",
     context = "\n\n".join([doc.page_content for doc in docs])
     quelldateien = list({doc.metadata.get("source", "?") for doc in docs})
 
-    # 4a. agent_datum Zweig 2 — Laufzeit/Alter aus Chunk deterministisch vorrechnen
-    # Nur wenn: Dauer-Keyword + Whitelist-Entität in Frage UND Datum im Top-Chunk.
-    # Fakt wird vor den Kontext ins Prompt injiziert → LLM formuliert nur noch.
-    laufzeit_entitaet = agent_datum.ist_laufzeitfrage(question)
-    if laufzeit_entitaet and docs:
-        fakt = agent_datum.berechne_laufzeit_aus_chunk(question, docs[0].page_content)
-        if fakt:
-            context = fakt + "\n\n" + context
+    # 4a. agent_datum Branch 2 — duration/age from chunk, deterministic
+    # Only if: duration keyword + whitelist entity in question AND date in top chunk.
+    # Fact is injected before the context into the prompt → LLM only formulates.
+    duration_entity = agent_datum.is_duration_question(question)
+    if duration_entity and docs:
+        fact = agent_datum.calculate_duration_from_chunk(question, docs[0].page_content)
+        if fact:
+            context = fact + "\n\n" + context
             quelldateien = ["🧮 agent_datum (Zweig 2)"] + quelldateien
-            print(f"  🧮 agent_datum Zweig 2 ({laufzeit_entitaet}): {fakt[:80]}")
+            print(f"  🧮 agent_datum Zweig 2 ({duration_entity}): {fact[:80]}")
 
     # 5. Prompt bauen (Original-Frage ans LLM, nicht die umgeschriebene)
     # Sprach-Anweisung explizit im Prompt — verhindert dass qwen auf Deutsch antwortet
@@ -537,9 +534,9 @@ def ask_susi_eval(question: str, chat_history: list | None = None) -> dict:
     # den Produktions-Zustand widerspiegelt. Bei reinen Kalenderfragen
     # muss die Bewertung genau das prüfen was das Frontend auch tut:
     # deterministische Antwort ohne LLM.
-    if lang == "de" and agent_datum.ist_kalenderfrage(question):
+    if lang == "de" and agent_datum.is_calendar_question(question):
         agent_start = time.time()
-        agent_antwort = agent_datum.beantworte_kalenderfrage(question)
+        agent_antwort = agent_datum.answer_calendar_question(question)
         agent_wall = round(time.time() - agent_start, 3)
         print(f"  🧮 agent_datum aktiv — deterministische Antwort ({agent_wall}s)")
         return {
@@ -630,15 +627,14 @@ def ask_susi_eval(question: str, chat_history: list | None = None) -> dict:
     context = "\n\n".join([doc.page_content for doc in docs])
     quelldateien = list({doc.metadata.get("source", "?") for doc in docs})
 
-    # 4a. agent_datum Zweig 2 — identisch zu ask_susi()
-    laufzeit_entitaet = agent_datum.ist_laufzeitfrage(question)
-    if laufzeit_entitaet and docs:
-        print(f"  DEBUG Zweig 2 Top-Chunk: {docs[0].page_content[:150]}")
-        fakt = agent_datum.berechne_laufzeit_aus_chunk(question, docs[0].page_content)        
-        if fakt:
-            context = fakt + "\n\n" + context
+    # 4a. agent_datum Branch 2 — identical to ask_susi()
+    duration_entity = agent_datum.is_duration_question(question)
+    if duration_entity and docs:
+        fact = agent_datum.calculate_duration_from_chunk(question, docs[0].page_content)
+        if fact:
+            context = fact + "\n\n" + context
             quelldateien = ["🧮 agent_datum (Zweig 2)"] + quelldateien
-            print(f"  🧮 agent_datum Zweig 2 ({laufzeit_entitaet}): {fakt[:80]}")
+            print(f"  🧮 agent_datum Zweig 2 ({duration_entity}): {fact[:80]}")
 
     lang_instruction = f"Answer in the language with ISO code '{lang}'."
     print(f"  \U0001f5e3\ufe0f  Sprach-Anweisung: {lang_instruction}")
