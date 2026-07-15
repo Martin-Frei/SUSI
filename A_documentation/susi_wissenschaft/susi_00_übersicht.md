@@ -10,7 +10,7 @@
 
 ## Was ist SUSI?
 
-SUSI ist ein vollständig lokal laufender KI-Assistent — kein Cloud-Dienst, keine fremden Server, keine Datenweitergabe. Der Name steht für *Selbständige und Schlaue Intelligenzbestie*, was den Charakter des Projekts ganz gut trifft: ein System, das mit der Zeit smarter wird, weil es strukturiertes Wissen aufbaut — nicht weil ein besseres Modell installiert wird.
+SUSI ist ein vollständig lokal laufender KI-Assistent — kein Cloud-Dienst, keine fremden Server, keine Datenweitergabe. Der Name steht für *Selbständige und Schlaue Intelligenzbestie*, was den Charakter des Projekts ganz gut trifft: ein System das mit der Zeit smarter wird, weil es strukturiertes Wissen aufbaut — nicht weil ein besseres Modell installiert wird.
 
 Die zentrale Designentscheidung hinter SUSI ist ungewöhnlich, aber konsequent:
 
@@ -24,7 +24,7 @@ Was das bedeutet: Egal ob morgen ein besseres Open-Source-Modell erscheint — S
 
 Kommerzielle KI-Assistenten wie Microsoft Copilot oder ChatGPT sind gut — aber sie haben eine strukturelle Schwäche: Wissen verlässt das Unternehmen. Jede Eingabe, jeder Kontext, jede interne Überlegung landet auf fremden Servern.
 
-Für Privatpersonen mag das tolerierbar sein. Für Unternehmen unter DSGVO, AI Act und Geschäftsgeheimnisgesetz (GeschGehG) ist es ein ernsthaftes Problem.
+Für Privatpersonen mag das tolerierbar sein. Für Unternehmen unter DSGVO, AI Act und Geschäftsgeheimnisgesetz ist es ein ernsthaftes Problem.
 
 Die Ausgangsfrage für SUSI war deshalb nicht *"Wie baue ich den besten Chatbot?"* sondern:
 
@@ -76,7 +76,7 @@ SUSIpedia ist eine strukturierte Sammlung von Markdown-Dateien die als Langzeitg
 
 Eine der wichtigsten praktischen Erkenntnisse aus dem Aufbau der Wissensbasis war inhaltlich, nicht technisch: **Ausformulierte Sätze retrievieren signifikant besser als kompakte Listen.** Embedding-Modelle sind auf natürliche Sprache optimiert — technische Kurznotationen erzeugen Vektoren die schlecht mit natürlichsprachlichen Suchanfragen überlappen.
 
-Diese Erkenntnis hat die gesamte Dokumentationspraxis verändert. Jede neue Datei folgt seitdem einem definierten Format das auf optimales Retrieval ausgelegt ist — menschliche Lesbarkeit ist dabei kein Gegensatz, sondern ein zweites Kriterium, das die SUSIpedia-Formatierungsregeln explizit mit einplanen (siehe Kapitel 03).
+Diese Erkenntnis hat die gesamte Dokumentationspraxis verändert. Jede neue Datei folgt seitdem einem definierten Format das auf optimales Retrieval ausgelegt ist — nicht auf menschliche Lesbarkeit.
 
 → *Details: [susi_03_SUSIpedia.md](susi_03_susipedia.md)*
 
@@ -106,7 +106,7 @@ Im Verlauf der Entwicklung wurden vier Architekturansätze identifiziert und bew
 
 **Vollautomatische Auto-Save-Pipeline:** Das System sollte eigenständig entscheiden wann eine Konversation in die Wissensbasis zurückgeschrieben wird. Das Risiko: Halluziniert das Modell, schreibt es seine eigenen Fehler ins Langzeitgedächtnis. Eine zerstörerische Feedback-Schleife.
 
-**LLM-basierte Konsolidierung:** Das Chat-Modell sollte alte und neue Wissensdokumente fusionieren. Das Problem: Dasselbe Modell, das im Chat Fehler macht, ist kein zuverlässiger Redakteur.
+**LLM-basierte Konsolidierung:** Das Chat-Modell sollte alte und neue Wissensdokumente fusionieren. Das Problem: Dasselbe Modell das im Chat Fehler macht ist kein zuverlässiger Redakteur.
 
 **Blindes Anhängen:** Neue Erkenntnisse chronologisch an bestehende Dateien anhängen führt zu widersprüchlichen Chunks — das Modell fängt an zu würfeln.
 
@@ -164,8 +164,8 @@ Die Architektur ist nicht nur für den persönlichen Einsatz gedacht. Lokale, DS
 3. **Retrieval vor Generation messen** — was das Retrieval nicht findet kann kein Prompt reparieren. Erst die Retrieval-Ebene verstehen, dann optimieren.
 4. **Human-in-the-Loop ist kein Kompromiss** — es ist das richtige Designprinzip für ein System das dauerhaft zuverlässig bleiben soll.
 5. **Einfachheit ist eine Architekturentscheidung** — ein Modell das gut funktioniert schlägt drei Agenten die sich gegenseitig stören.
-6. **Language ≠ Computation** — LLMs sollen routen und generieren, nicht rechnen. Für Datum, Alter und Differenzen ist ein deterministisches Tool immer überlegen. *(→ Kapitel 06, Grenzerfahrung 7)*
-7. **Similarity-Metriken messen Ähnlichkeit, nicht Korrektheit** — BERTScore und ROUGE-L erkennen nicht ob eine Zahl falsch ist. Numerisch präzise Domänen brauchen deterministischen Pre-Check. *(→ Kapitel 06, Grenzerfahrung 5)*
+6. **Language ≠ Computation** — LLMs sollen routen und generieren, nicht rechnen. Für Datum, Alter und Differenzen ist ein deterministisches Tool immer überlegen.
+7. **Similarity-Metriken messen Ähnlichkeit, nicht Korrektheit** — BERTScore und ROUGE-L erkennen nicht ob eine Zahl falsch ist. Numerisch präzise Domänen brauchen deterministischen Pre-Check.
 
 ---
 
@@ -178,10 +178,9 @@ Seit Abschluss der Evaluierungsphase ist SUSI in den Produktivbetrieb übergegan
 - **Reranker:** bge-reranker-v2-m3 (97% Korrektheit) nach Evolution über drei Modell-Generationen
 - **Query Rewriting:** LLM-basiertes Umschreiben von Ich-Form und Folgefragen vor dem Retrieval; Fachbegriffe werden nicht übersetzt
 - **Lauf C:** 5.860 Runs bestätigen — Parameter-Unterschiede sind minimal, Dokumentqualität ist der größte Hebel
-- **RAGAS:** dritte Bewertungsstufe löst die Grauzone paraphrasierter Antworten auf; die scheinbare 18.8%-Fehlerrate bei `lernen` war ein Scorer-Artefakt (real 2.6%)
 - **Tool Use:** `agent_datum` löst Kalender-Fragen deterministisch in ~1ms, kein LLM, keine Halluzination
-- **Chat-History:** SQLite-Persistenz mit HitL-Queue-Button seit Juni 2026
-- **Läufe D/E/F:** Lauf D Breitenlauf mit RAGAS-Validierung (97.1%), Lauf E qwen3-Thinking-Test (kein Vorteil), Lauf F erste End-to-End-Router-Evaluation (Router-Accuracy ~70%, doppeltes Rewriting gefunden und gefixt)
+- **Chat-History:** SQLite-Persistenz mit HitL-Queue-Button seit 25.06.2026
+- **Läufe D/E/F/G:** Router-Tracking, qwen3-Thinking-Test (kein Vorteil), doppeltes Rewriting gefunden und gefixt, ValueCheck-Konflikt (Diagnostic Score 6) entdeckt und gelöst
 
 → *Vollständige Dokumentation: [susi_08_Produktivbetrieb.md](susi_08_produktivbetrieb.md)*
 

@@ -1,5 +1,5 @@
 # 07 — Roadmap
-### SUSI Entwicklungsbericht · Stand Juli 2026
+### SUSI Entwicklungsbericht · Stand Juni 2026
 
 ---
 
@@ -7,7 +7,7 @@
 
 SUSI ist kein abgeschlossenes Projekt. Es ist ein System in aktivem Betrieb, das parallel weiterentwickelt wird. Die folgende Roadmap unterscheidet zwischen kurzfristigen Maßnahmen, die unmittelbar auf die aktuellen Erkenntnisse reagieren, und längerfristigen Ausbaustufen, die den Charakter des Systems fundamental erweitern.
 
-Die Grundregel für die Priorisierung lautet: **Qualität vor Quantität.** Jede Erweiterung, die ein instabiles Fundament voraussetzt, wird zurückgestellt bis das Fundament solide ist.
+Die Grundregel für die Priorisierung lautet: **Qualität vor Quantität.** Jede Erweiterung die ein instabiles Fundament voraussetzt wird zurückgestellt bis das Fundament solide ist.
 
 ---
 
@@ -49,27 +49,12 @@ bge-reranker-v2-m3 produktiv. Läuft auf CPU, kein VRAM-Verbrauch.
 
 ### Metriken-Konsistenz im Evaluator absichern
 
-✅ **Metriken-Konsistenz im Evaluator abgesichert (06.07.2026).** `DIAG_ZU_QUALITAET` 
-ist als zentrale Mapping-Konstante in `auto_scorer.py` verankert (0→0, 1→0, 2→1, 3→2, 
-4→0, 5→0). `grid_run.py` importiert sie zentral statt sie lokal zu duplizieren; 
-`ragas_scorer.py` und `analyse_csv.py` behalten vorerst ihre Kopien als offenes 
-Hygiene-Refactoring. Die `--nachbewertung`-Skala (0–2 vs. System 0–5) ist davon 
-unberührt und bleibt ein offener Punkt.
-
-→ *Details: [susi_04_evaluation.md](susi_04_evaluation.md), [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
-
-### Asynchronen Worker für Modellwechsel und `!save`-Kommando
-
-**Bereits aktiv:** Der HitL-Queue-Button ist produktiv — jede SUSI-Antwort kann per Klick einzeln in die Review-Queue geschickt werden.
-
-**Noch offen — `!save`-Befehl implementieren:** Der explizite Speicher-Trigger für einen ganzen, bereinigten Chatverlauf existiert noch nicht. `!save` als Frontend-Befehl implementieren, einen asynchronen Django-Task (Django-Q oder Celery) anschließen, und HTMX Polling für Statusmeldungen ("Lade Modell...", "Erstelle Zusammenfassung...", "Bereit für Review") einbauen. Der Nutzer wird nicht allein gelassen.
-
-
-❌ Asynchronen Worker für Modellwechsel *(geplant Q3 2026)*
-Der `!save`-Befehl ist noch nicht implementiert. Die Planung steht (Kapitel 05 + 06): 
-asynchroner Django-Task, `OLLAMA_MAX_LOADED_MODELS=1`, HTMX Polling für Status-Feedback. 
-Wird selten ausgelöst (2–3 Mal pro Tag) — kein permanenter Worker nötig.
-
+❌ Metriken-Konsistenz im Evaluator absichern *(in Arbeit)*
+Der Skalenfehler aus den frühen Läufen darf sich nicht wiederholen. `MAX_SCORE = 6` und 
+`KORREKT_THRESHOLD` werden als explizite Konstanten in `evaluator.py` verankert. 
+Jede CSV-Ausgabe enthält diese Werte als Metadaten-Spalten. Zusätzlich: 
+Nachbewertungs-Skala (`--nachbewertung`) mit dem System vereinheitlichen (0–3).
+`ragas_scorer.py` und `analyse_csv.py` müssen ihre lokalen `DIAG_ZU_QUALITAET`-Duplikate um Score 6 (ValueCheck-Konflikt → None) erweitern.
 
 ### Zusätzliche Meilensteine — bereits erledigt (Juni 2026)
 
@@ -98,9 +83,11 @@ Das Konzept des Human-in-the-Loop Speichermodells ist ausgearbeitet (vgl. Kapite
 Die technischen Voraussetzungen sind mit bge-reranker-v2-m3 (97% Korrektheit) und dem 
 produktiven Router gegeben. Die Implementierung folgt in dieser Reihenfolge:
 
-**Stufe 1 — SQLite Kurzzeitgedächtnis:** ✅ **Aktiv seit 25.06.2026.** Der Chatverlauf wird persistent in einer lokalen SQLite-Tabelle gehalten (`Chat`, `Message`, `QueueItem`). Kein Datenverlust bei Ollama-Crashes. Jede Antwort hat einen HitL-Queue-Button für manuelles Review. Was noch fehlt: das explizite `!save`-Kommando, das einen ganzen bereinigten Chatverlauf auf einmal verarbeitet — aktuell läuft die Freigabe einzeln pro Antwort.
+**Stufe 1 — SQLite Kurzzeitgedächtnis:** Der Chatverlauf wird persistent in einer lokalen SQLite-Tabelle gehalten. Kein Datenverlust bei Ollama-Crashes. Trigger: einzig der explizite `!save`-Befehl.
 
 **Stufe 2 — Automatisierter Türsteher:** Der Markdown-Entwurf durchläuft einen mehrsprachigen Cross-Encoder-Check bevor er die SUSIpedia erreicht. Halluzinierter Inhalt wird abgefangen. Der Modellwechsel passiert asynchron im Hintergrund — `OLLAMA_MAX_LOADED_MODELS=1` verhindert dass beide Modelle gleichzeitig VRAM belegen.
+
+**Asynchroner Worker für Modellwechsel:** Der `!save`-Befehl ist noch nicht implementiert. Die Planung steht (Kapitel 05 + 06): asynchroner Django-Task (Django-Q oder Celery), `OLLAMA_MAX_LOADED_MODELS=1`, HTMX Polling für Status-Feedback. Wird selten ausgelöst (2–3 Mal pro Tag) — kein permanenter Worker nötig.
 
 **Frontend-Feedback während des Speicherns:** Während der Background-Task läuft zeigt das HTMX-Frontend eine kleine Statusanzeige — "Lade Modell...", "Erstelle Zusammenfassung...", "Prüfe auf Halluzinationen...", "Bereit für Review". Der Nutzer wird nicht allein gelassen. Das kostet keine Architektur-Komplexität — HTMX Polling auf einen Status-Endpoint reicht vollständig aus.
 
@@ -112,7 +99,7 @@ produktiven Router gegeben. Die Implementierung folgt in dieser Reihenfolge:
 
 Mehrere offene Fragen aus der Evaluierung deuten auf strukturelle Grenzen der aktuellen Retrieval-Architektur hin. Phase 3 beginnt erst wenn Phase 2 abgeschlossen ist und der Cross-Encoder-Reranker mindestens einen vollständigen Evaluierungslauf mit messbarer Verbesserung gezeigt hat. Die Gate-Bedingung: Hit@1 über 65% und das 3-stufige Speichermodell hat mindestens 30 validierte Saves ohne erkannte Halluzination verarbeitet.
 
-**Reihenfolge innerhalb Phase 3:** Kategorie-spezifische Konfiguration ist bereits durch den Router gelöst (siehe unten) und keine offene Priorität mehr. Von den verbleibenden zwei Punkten kommt PDF-RAG zuerst — es ist unabhängig vom Retrieval-Kernproblem und nutzt das bereits generisch gehaltene Query Rewriting direkt. Hybrid Search kommt danach und nur wenn PDF-RAG und die bisherigen Maßnahmen das Projekte-Retrieval-Problem nicht vollständig lösen.
+**Reihenfolge innerhalb Phase 3:** Kategorie-spezifische Konfiguration, dann Hybrid Search — nur wenn die anderen Maßnahmen das Projekte-Problem nicht vollständig lösen.
 
 ### PDF-RAG *(geplant)*
 
@@ -179,4 +166,4 @@ Die in Kapitel 06 dokumentierten Grenzerfahrungen bleiben bestehen und werden du
 
 → *Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
 → *Produktivbetrieb: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*   
-*Stand: Juli 2026 · Martin Freimuth*
+*Stand: Juni 2026 · Martin Freimuth*
