@@ -11,6 +11,9 @@ Skala:
     3  →  RAG korrekt ✅ — richtiger Chunk gefunden, richtige Antwort
     4  →  RAG falsch — Generation-Problem — Chunk gut aber LLM macht Fehler
     5  →  RAG falsch — falscher Chunk — Retrieval in falsche Kategorie
+    6  →  ValueCheck-Konflikt — Wertefehler bei hohen BERT/ROUGE-Metriken
+         → Grauzone: RAGAS entscheidet (typisch: verschiedene korrekte Zahlen
+         für denselben Sachverhalt, z.B. "Faktor 18" vs "52 Prozentpunkte")
 
 Schwellenwerte (aus 768 echten Einträgen berechnet):
     ROUGE-L < 0.05                          →  0 oder 1
@@ -44,15 +47,16 @@ except ImportError:
 
 
 # ── Konstanten ────────────────────────────────────────────────────
-MAX_SCORE = 5
+MAX_SCORE = 6
 KORREKT_THRESHOLD = 2   # Score >= 2 gilt als korrekt
 
-# Zentrales Mapping Diagnostic-Skala (0-5) → Quality-Skala (0-2).
+# Zentrales Mapping Diagnostic-Skala (0-6) → Quality-Skala (0-2/None).
 # Bisher dreifach dupliziert in grid_run.py, ragas_scorer.py und
 # analyse_csv.py — hier ist ab jetzt die Single Source of Truth.
 # 0=Ausweich→0, 1=Halluzination→0, 2=Training→1,
-# 3=RAG korrekt→2, 4=Generation→0, 5=Falscher Chunk→0
-DIAG_ZU_QUALITAET = {0: 0, 1: 0, 2: 1, 3: 2, 4: 0, 5: 0}
+# 3=RAG korrekt→2, 4=Generation→0, 5=Falscher Chunk→0,
+# 6=ValueCheck-Konflikt→None (Grauzone, RAGAS entscheidet)
+DIAG_ZU_QUALITAET = {0: 0, 1: 0, 2: 1, 3: 2, 4: 0, 5: 0, 6: None}
 
 # Rollout-Schalter für ValueCheck:
 #   True  = sicherer Wertefehler wird hart Score 1 (Zielzustand)
@@ -155,9 +159,33 @@ def berechne_auto_score(
     # BERT/ROUGE können numerisch falsche, fließend formulierte Antworten
     # nicht erkennen — ValueCheck vergleicht Zahlen, Daten und Wochentage
     # direkt Wert gegen Wert.
+    #
+    # KONFLIKT-ERKENNUNG (15.07.2026):
+    # Wenn ValueCheck "falsch" sagt aber BERT/ROUGE hohe Werte zeigen,
+    # liegt vermutlich kein echter Fehler vor sondern ein alternativer
+    # korrekter Ausdruck (z.B. "Faktor 18" vs "52 Prozentpunkte").
+    # In diesem Fall → Diagnostic 6 (Grauzone, RAGAS entscheidet)
+    # statt hart Diagnostic 1 (Halluzination).
     if referenz and antwort and VALUECHECK_VERFUEGBAR:
         vc = _valuecheck_pruefe(referenz, antwort)
         if vc["status"] == "falsch":
+            # Prüfen ob die Similarity-Metriken der Diagnose widersprechen
+            _rouge = antwort_rougeL or 0
+            _bert = antwort_bert or 0
+            metriken_hoch = (_rouge > SCHWELLEN["korrekt_rouge"]
+                            and _bert > SCHWELLEN["korrekt_bert"])
+
+            if metriken_hoch:
+                # Konflikt: ValueCheck sagt falsch, Metriken sagen korrekt
+                # → Grauzone (Score 6), RAGAS entscheidet
+                return {
+                    "score": 6,
+                    "konfidenz": "grauzone",
+                    "grund": (f"ValueCheck-Konflikt: {vc['grund']} "
+                              f"(aber BERT={_bert:.3f}, ROUGE={_rouge:.3f})"),
+                    "manuell": True
+                }
+
             if VALUECHECK_HART:
                 return {
                     "score": 1,
@@ -318,7 +346,8 @@ def zeige_auto_score(result: dict, frage: str, referenz: str, antwort: str,
         2: "Training korrekt",
         3: "RAG korrekt ✅",
         4: "RAG falsch — Generation",
-        5: "RAG falsch — falscher Chunk"
+        5: "RAG falsch — falscher Chunk",
+        6: "ValueCheck-Konflikt → Grauzone"
     }
 
     if not result["manuell"] and result["score"] is not None:
@@ -381,7 +410,7 @@ def analysiere_mit_auto_scorer(csv_path: str) -> dict:
         "gesamt": 0,
         "automatisch": 0,
         "grauzone": 0,
-        "score_verteilung": {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0},
+        "score_verteilung": {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0},
         "korrekt_vs_manuell": {"korrekt": 0, "falsch": 0, "kein_vergleich": 0}
     }
 
@@ -458,7 +487,7 @@ if __name__ == "__main__":
         print(f"   MAX_SCORE       : {MAX_SCORE}")
         print(f"   KORREKT_THRESHOLD: {KORREKT_THRESHOLD}")
         print(f"\n   Score-Verteilung (automatisch):")
-        labels = {0:"Ausweich", 1:"Halluz", 2:"Training", 3:"RAG✅", 4:"RAGGen", 5:"RAGChunk"}
+        labels = {0:"Ausweich", 1:"Halluz", 2:"Training", 3:"RAG✅", 4:"RAGGen", 5:"RAGChunk", 6:"VCKonfl"}
         for s, n in stats["score_verteilung"].items():
             if n > 0:
                 print(f"   Score {s} ({labels[s]:<12}): {n}")
