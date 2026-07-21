@@ -40,9 +40,9 @@ class CoreConfig(AppConfig):
             reranker_model = cfg.get('reranker', {}).get('model', '')
             if reranker_model:
                 print(f"  🔥 Warmup Reranker: {reranker_model}")
-                from sentence_transformers import CrossEncoder
-                CrossEncoder(reranker_model)
-                print(f"  ✅ Reranker loaded")
+                from rag.query import get_reranker
+                get_reranker()
+                print(f"  ✅ Reranker loaded (CPU)")
         except Exception as e:
             print(f"  ⚠ Reranker warmup failed: {e}")
 
