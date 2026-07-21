@@ -33,7 +33,7 @@ Dieser Bericht ist kein Portfolio-Stück das nur Erfolge dokumentiert. Grenzerfa
 
 **Stand Juni 2026:** amberoad wurde getestet und mit 59% Korrektheit disqualifiziert — der Reranker warf aktiv gute Chunks weg. Die produktive Lösung ist `BAAI/bge-reranker-v2-m3` (97% Korrektheit), vom selben Team wie das Embedding-Modell bge-m3. Die vollständige Reranker-Evolution (ms-marco → amberoad → bge) ist in Kapitel 08 dokumentiert.
 
-→ *Reranker-Evolution: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
+→ *Reranker-Evolution: [susi_08_produktivbetrieb_pipeline.md](susi_08_produktivbetrieb_pipeline.md)*
 
 **Die Lektion:** Sprachkompatibilität ist eine funktionale Anforderung. Bei jedem NLP-Modell das in SUSI eingesetzt wird muss explizit geprüft werden: auf welcher Sprache wurde trainiert, und welche Sprache verarbeitet SUSI?
 
@@ -133,5 +133,5 @@ Das externe Review hat die ersten blinden Flecken sichtbar gemacht. Das Evaluier
 
 → *Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
 → *Weiter: [susi_07_roadmap.md](susi_07_roadmap.md)*  
-→ *Produktivbetrieb: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*  
+→ *Produktivbetrieb: [susi_08_produktivbetrieb_pipeline.md](susi_08_produktivbetrieb_pipeline.md)*  
 *Stand: Juli 2026 · Martin Freimuth*

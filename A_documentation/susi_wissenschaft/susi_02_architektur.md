@@ -5,7 +5,7 @@
 
 ## Das unveränderliche Grundprinzip
 
-SUSI folgt dem RAG-Prinzip (Retrieval-Augmented Generation). Das Grundprinzip hat sich seit dem ersten Tag nicht geändert und wird sich auch nicht ändern — es ist die architektonische Basis auf der alles andere aufbaut:
+SUSI folgt dem RAG-Prinzip (Retrieval-Augmented Generation). Das Grundprinzip hat sich seit dem ersten Tag nicht geändert — und wird es auch nicht. Es ist die architektonische Basis auf der alles andere aufbaut:
 
 ```
 Frage des Nutzers
@@ -108,6 +108,16 @@ bge-m3 gilt als stärkster Allrounder mit besserer deutscher Sprachverarbeitung.
 
 ### Chunk-Größe
 
+Die Chunking-Strategie hat sich über vier Stufen entwickelt:
+
+```
+März 2026:  RecursiveCharacterTextSplitter (300/50, einheitlich)
+April 2026: Differenzierte Größen (persönlich 300, technisch 500) — verworfen
+Juni 2026:  Einheitlich 1000/50 — 94% Korrektheit (Lauf C)
+Juli 2026:  split_by_headings() — semantische Chunk-Grenzen an ##-Headings
+Juli 2026:  _split_oversized(1500) — Schutz vor Monster-Chunks
+```
+
 **Stand März 2026:** `chunk_size=300, overlap=50` — einheitlich für alle Dateien
 
 **Geplant aber nicht implementiert (April 2026):** Differenzierte Chunk-Größen — 300/50 für persönliche Inhalte, 500/100 für technische Inhalte. Die Logik war inhaltlich sinnvoll: technische Konzepte brauchen mehr Kontext als kurze persönliche Fakten. In der Praxis wurde die Differenzierung nicht in `ingest.py` umgesetzt weil die Evaluierungsläufe zeigten dass eine einheitliche große Chunk-Größe (1000) kategorieübergreifend bessere Ergebnisse liefert als eine differenzierte kleine.
@@ -146,7 +156,8 @@ bge-m3 gilt als stärkster Allrounder mit besserer deutscher Sprachverarbeitung.
 
 **Stand Produktivbetrieb (Juli 2026):** `qwen2.5-coder:7b` ist primäres Modell (Fakten, Code, alle Profile außer lernen, persoenlich und wissen). `llama3.1:8b` für Profil `lernen` und `wissen`. `qwen2.5:7b` für Profil `persoenlich` (multilingual). `qwen3:8b` und `qwen3:14b` getestet in Lauf E — kein signifikanter Vorteil gegenüber qwen2.5-coder:7b.
 
-→ *Details: [susi_04_evaluation.md](susi_04_evaluation.md), [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
+→ *Details: [susi_04_evaluation.md](susi_04_evaluation.md),         
+[susi_08_produktivbetrieb_pipeline.md](susi_08_produktivbetrieb_pipeline.md)*
 
 ---
 
@@ -201,7 +212,7 @@ Fünf Router-Profile plus ein Wissens-Profil: susi, projekte, lernen, persoenlic
 → jedes mit eigenem LLM, top_k, top_n und Temperature.     
 Bei Fragen außerhalb der SUSIpedia greift `agent_britannica` als Live-Fallback (ROUTER_MIN_SCORE ≤ 0.5).
 
-*Details: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
+*Details: [susi_08_produktivbetrieb_pipeline.md](susi_08_produktivbetrieb_pipeline.md)*
 
 ---
 
@@ -222,7 +233,7 @@ formale Evaluation sichtbar wurde.
 **Aktueller Status:** Die Pipeline wurde im Mai 2026 deaktiviert. Der Code bleibt nach dem Prinzip "kein Abriss ohne Ersatz" in `query.py` erhalten. Das Fundament der neuen 3-stufigen Architektur steht: bge-reranker-v2-m3 (97% Korrektheit) produktiv, SQLite-Persistenz mit `Chat`, `Message` und `QueueItem` seit 25.06.2026 aktiv, HitL-Queue-Button an jeder Antwort. Asynchroner Worker und `!save`-Kommando folgen in Q3 2026.
 
 → *Vollständige Analyse: [susi_05_sackgassen.md](susi_05_sackgassen.md)*  
-→ *Reranker-Evolution: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
+→ *Reranker-Evolution: [susi_08_produktivbetrieb_pipeline.md](susi_08_produktivbetrieb_pipeline.md)*
 
 ---
 
@@ -331,7 +342,7 @@ LoRA ist kein neues Konzept — es taucht in der Literatur regelmäßig auf. Der
 
 ---
 
-*→ Zurück zur Übersicht: [susi_00_Übersicht.md](susi_00_übersicht.md)*  
+*→ Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
 → *Weiter: [susi_03_susipedia.md](susi_03_susipedia.md)*  
-→ *Produktivbetrieb: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*  
+→ *Produktivbetrieb: [susi_08_produktivbetrieb_pipeline.md](susi_08_produktivbetrieb_pipeline.md)*  
 *Stand: Juli 2026 · Martin Freimuth*

@@ -234,5 +234,5 @@ Danach wurde die Remote-Verbindung neu gesetzt und die bereinigte History mit `-
 
 → *Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
 → *Weiter: [susi_04_evaluation.md](susi_04_evaluation.md)*  
-→ *Produktivbetrieb: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*  
+→ *Produktivbetrieb: [susi_08_produktivbetrieb_pipeline.md](susi_08_produktivbetrieb_pipeline.md)*  
 *Stand: Juli 2026 · Martin Freimuth*

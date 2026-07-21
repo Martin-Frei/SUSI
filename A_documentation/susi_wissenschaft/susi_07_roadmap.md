@@ -23,7 +23,7 @@ Stand 10.06.2026: ca. 85% der 124 Dateien überarbeitet, Retrieval Hit Rate bere
 Retrieval Hit Rate von 36% auf 91% gesteigert. Lauf C bestätigt: Dokumentqualität 
 war der größte Hebel.
 
-→ *Details: [susi_04_evaluation.md](susi_04_evaluation.md), [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
+→ *Details: [susi_04_evaluation.md](susi_04_evaluation.md), [susi_08_produktivbetrieb_evaluation.md](susi_08_produktivbetrieb_evaluation.md)*
 
 ### MMR vs. Similarity evaluieren
 
@@ -33,7 +33,7 @@ Vor dem Cross-Encoder-Reranker wird MMR getestet — hier gibt es bereits Daten 
 schlechter als similarity (Ø 3.01). Unterschied statistisch irrelevant. 
 Similarity bleibt Standard.
 
-→ *Details: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
+→ *Details: [susi_08_produktivbetrieb_evaluation.md](susi_08_produktivbetrieb_evaluation.md)*
 
 ### Cross-Encoder Reranker implementieren
 
@@ -45,7 +45,7 @@ Wichtig: das gewählte Modell muss deutsch-kompatibel sein. Kandidat ist `ambero
 Modell-Generationen (ms-marco → amberoad/59% → bge-reranker-v2-m3/97%) ist 
 bge-reranker-v2-m3 produktiv. Läuft auf CPU, kein VRAM-Verbrauch.
 
-→ *Details: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
+→ *Details: [susi_08_produktivbetrieb_pipeline.md](susi_08_produktivbetrieb_pipeline.md)*
 
 ### Metriken-Konsistenz im Evaluator absichern
 
@@ -85,7 +85,7 @@ Rewriter übergeben. Antworten auf 200 Zeichen gekürzt.
 ✅ **Frontend: SUSI-Icon + lokale Fonts (20.06.2026).** GDPR-konform, kein 
 externer Request.
 
-→ *Details zu allen Punkten: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
+→ *Details zu allen Punkten: [susi_08_produktivbetrieb_infrastruktur.md](susi_08_produktivbetrieb_infrastruktur.md)*
 
 ### Zusätzliche Meilensteine — Juli 2026
 
@@ -111,7 +111,7 @@ Warmup-Singleton. Ergebnis: 120s → 3–5s.
 ✅ **Lauf G (15.07.).** ValueCheck False Positives entdeckt, Diagnostic Score 6 als Fix. 
 Bereinigte Korrektheit ~93.8%, Router-Accuracy 67.5%.
 
-→ *Details: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
+→ *Details: [susi_08_produktivbetrieb_pipeline.md](susi_08_produktivbetrieb_pipeline.md)*
 ---
 
 ## Phase 2 — 3-stufiges Speichermodell implementieren *(Q4 2026)*
@@ -156,7 +156,7 @@ spezifischen top_k-, top_n- und Temperature-Werten zu. Lernen nutzt llama3.1:8b
 mit top_k=9, Projekte nutzen qwen2.5-coder:7b mit top_k=7. Keine manuelle 
 Konfiguration nötig — die SUSIpedia-Ordnerstruktur steuert die Zuordnung automatisch.
 
-→ *Details: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
+→ *Details: [susi_08_produktivbetrieb_pipeline.md](susi_08_produktivbetrieb_pipeline.md)*
 ---
 
 ## Phase 4 — Edge Deployment und physische Integration *(langfristig)*
@@ -200,5 +200,5 @@ Die in Kapitel 06 dokumentierten Grenzerfahrungen bleiben bestehen und werden du
 ---
 
 → *Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
-→ *Produktivbetrieb: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*   
+→ *Produktivbetrieb: [susi_08_produktivbetrieb_pipeline.md](susi_08_produktivbetrieb_pipeline.md)*   
 *Stand: Juli 2026 · Martin Freimuth*

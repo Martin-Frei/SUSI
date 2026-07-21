@@ -28,7 +28,7 @@ Das System war vollständig implementiert und lief produktiv. Es fühlte sich na
 (siehe unten) ist in Planung (Q3 2026). Der dafür vorgesehene Cross-Encoder 
 ist mit bge-reranker-v2-m3 (97% Korrektheit) bereits im Produktivbetrieb.
 
-→ *Reranker-Evolution: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
+→ *Reranker-Evolution: [susi_08_produktivbetrieb_pipeline.md](susi_08_produktivbetrieb_pipeline.md)*
 
 ---
 
@@ -143,5 +143,5 @@ Die neue Architektur dreht das Verhältnis um: die KI ist ein hocheffizienter Se
 
 → *Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
 → *Weiter: [susi_06_grenzerfahrungen.md](susi_06_grenzerfahrungen.md)*  
-→ *Produktivbetrieb: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*  
+→ *Produktivbetrieb: [susi_08_produktivbetrieb_pipeline.md](susi_08_produktivbetrieb_pipeline.md)*  
 *Stand: Juli 2026 · Martin Freimuth*

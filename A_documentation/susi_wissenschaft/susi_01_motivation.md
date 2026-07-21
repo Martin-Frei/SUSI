@@ -77,6 +77,6 @@ SUSI ist der Versuch einer Antwort darauf. Kein abgeschlossener — sondern ein 
 
 ---
 
-*→ Zurück zur Übersicht: [00_SUSI_Uebersicht.md](susi_00_übersicht.md)*  
-*→ Weiter: [02_Architektur.md](susi_02_architektur.md)*  
+*→ Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
+*→ Weiter: [susi_02_architektur.md](susi_02_architektur.md)*  
 *Stand: Juli 2026 · Martin Freimuth*

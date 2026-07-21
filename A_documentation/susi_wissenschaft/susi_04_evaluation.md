@@ -503,7 +503,7 @@ Modell-Tuning. Die Phase der Parameter-Optimierung ist abgeschlossen.
 Die `susi/`-Kategorie ist mit 98% die schwächste — hier besteht noch Potenzial 
 durch bessere Topic-Label Ankersätze in den SUSI-eigenen Dokumentationsdateien.
 
-→ *Details: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
+→ *Details: [susi_08_produktivbetrieb_evaluation.md](susi_08_produktivbetrieb_evaluation.md)*
 
 ## Lauf D — Router-Tracking *(24.06.2026)*
 
@@ -606,5 +606,5 @@ Die Diagnostic Scale (0–6) erklärt *warum* eine Antwort so ist. Die Quality S
 
 → *Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
 → *Weiter: [susi_05_sackgassen.md](susi_05_sackgassen.md)*  
-→ *Produktivbetrieb: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*    
+→ *Produktivbetrieb: [susi_08_produktivbetrieb_pipeline.md](susi_08_produktivbetrieb_pipeline.md)*    
 *Stand: Juli 2026 · Martin Freimuth*

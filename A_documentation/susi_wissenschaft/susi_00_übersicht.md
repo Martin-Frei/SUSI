@@ -10,9 +10,9 @@
 
 ## Was ist SUSI?
 
-SUSI ist ein vollständig lokal laufender KI-Assistent — kein Cloud-Dienst, keine fremden Server, keine Datenweitergabe. Der Name steht für *Selbständige und Schlaue Intelligenzbestie*, was den Charakter des Projekts ganz gut trifft: ein System das mit der Zeit smarter wird, weil es strukturiertes Wissen aufbaut — nicht weil ein besseres Modell installiert wird.
+SUSI ist ein vollständig lokal laufender KI-Assistent — kein Cloud-Dienst, keine fremden Server, keine Datenweitergabe. Der Name steht für *Selbständige und Schlaue Intelligenzbestie*. Die zentrale These dieses Berichts: Die Wissensbasis ist das Asset — nicht das Modell. Wer SUSIpedia besitzt, ist unabhängig von Modell-Updates und Anbieter-Entscheidungen. Der Bericht zeigt wie diese These durch systematische Evaluation und iterative Verbesserung empirisch belegt wurde.
 
-Die zentrale Designentscheidung hinter SUSI ist ungewöhnlich, aber konsequent:
+Die Designentscheidung dahinter ist ungewöhnlich, aber konsequent:
 
 > *Das Sprachmodell ist austauschbar. Die Wissensbasis ist das eigentliche Asset.*
 
@@ -30,7 +30,7 @@ Die Ausgangsfrage für SUSI war deshalb nicht *"Wie baue ich den besten Chatbot?
 
 > *"Wie baue ich einen KI-Assistenten, der alles lokal verarbeitet, nichts nach außen sendet, und trotzdem mit der Zeit immer smarter wird?"*
 
-→ *Details: [susi_01_Motivation.md](susi_01_motivation.md)*
+→ *Details: [susi_01_motivation.md](susi_01_motivation.md)*
 
 ---
 
@@ -66,7 +66,7 @@ Alle Komponenten laufen auf der eigenen Hardware. Kein einziger Byte verlässt d
 
 Der Stack hat sich über mehrere Iterationen entwickelt — von einem einfachen Skript zu einem vollständigen Django-Backend mit HTMX-Frontend, differenzieller Ingestion-Pipeline und formalem Evaluierungsframework.
 
-→ *Details: [susi_02_Architektur.md](susi_02_architektur.md)*
+→ *Details: [susi_02_architektur.md](susi_02_architektur.md)*
 
 ---
 
@@ -78,13 +78,13 @@ Eine der wichtigsten praktischen Erkenntnisse aus dem Aufbau der Wissensbasis wa
 
 Diese Erkenntnis hat die gesamte Dokumentationspraxis verändert. Jede neue Datei folgt seitdem einem definierten Format das auf optimales Retrieval ausgelegt ist — nicht auf menschliche Lesbarkeit.
 
-→ *Details: [susi_03_SUSIpedia.md](susi_03_susipedia.md)*
+→ *Details: [susi_03_susipedia.md](susi_03_susipedia.md)*
 
 ---
 
 ## Wie wird Qualität gemessen?
 
-Qualität ohne Messung ist eine Behauptung. Deshalb wurde früh ein formales Evaluierungsframework aufgebaut statt das System einfach zu benutzen und für "gut genug" zu befinden.
+Qualität ohne Messung ist eine Behauptung. Deshalb wurde früh ein formales Evaluierungsframework aufgebaut — statt das System einfach zu benutzen und für "gut genug" zu befinden.
 
 Das Framework misst auf zwei Ebenen:
 
@@ -94,7 +94,7 @@ Das Framework misst auf zwei Ebenen:
 
 Die Kombination beider Ebenen macht sichtbar wo ein Problem wirklich liegt — im Retrieval oder in der Generierung. Das ist der Unterschied zwischen systematischer Optimierung und Raten.
 
-→ *Details: [susi_04_Evaluation.md](susi_04_evaluation.md)*
+→ *Details: [susi_04_evaluation.md](susi_04_evaluation.md)*
 
 ---
 
@@ -117,7 +117,7 @@ Die Lösung ist eine **3-stufige Architektur mit Human-in-the-Loop**: Kurzzeitge
 Entwürfe vor, der Mensch behält die Datenhoheit. Die alte Auto-Save-Pipeline wurde im Mai 2026 
 deaktiviert — die neue Architektur befindet sich in Planung (Q3 2026).
 
-→ *Details: [susi_05_Sackgassen_und_neue_Architektur.md](susi_05_sackgassen.md)*
+→ *Details: [susi_05_sackgassen.md](susi_05_sackgassen.md)*
 
 ---
 
@@ -135,7 +135,7 @@ SUSI ist kein GPT-4-Ersatz. Das war nie das Ziel.
 
 SUSI und externe KI-Assistenten sind komplementär, nicht kompetitiv. Die Kombination ist stärker als jedes einzelne System.
 
-→ *Details: [susi_06_Grenzerfahrungen.md](susi_06_grenzerfahrungen.md)*
+→ *Details: [susi_06_grenzerfahrungen.md](susi_06_grenzerfahrungen.md)*
 
 ---
 
@@ -153,7 +153,7 @@ Vollständige Integration privater und beruflicher Wissensbasis. SUSI als proakt
 **Geschäftspotenzial:**  
 Die Architektur ist nicht nur für den persönlichen Einsatz gedacht. Lokale, DSGVO-konforme RAG-Assistenten für mittelständische Unternehmen — als Alternative zu Microsoft Copilot für Firmen die ihre Daten nicht in die Cloud geben wollen oder dürfen. Der Kerngedanke — die Wissensbasis als dauerhaft eigenes Asset — ist für Unternehmen strategisch attraktiv.
 
-→ *Details: [susi_07_Roadmap_und_Geschaeftspotenzial.md](susi_07_roadmap.md)*
+→ *Details: [susi_07_roadmap.md](susi_07_roadmap.md)*
 
 ---
 
@@ -174,16 +174,18 @@ Die Architektur ist nicht nur für den persönlichen Einsatz gedacht. Lokale, DS
 
 Seit Abschluss der Evaluierungsphase ist SUSI in den Produktivbetrieb übergegangen und wird aktiv weiterentwickelt. Die wichtigsten Komponenten:
 
-- **Router:** Retrieval-getriebenes Profil-System mit 5 Kategorien (susi, projekte, lernen, persoenlich, technik)
+- **Router:** Retrieval-getriebenes Profil-System mit 6 Kategorien (susi, projekte, lernen, persoenlich, technik, wissen). `ROUTER_MIN_SCORE = 0.5` als Gate für Out-of-Domain-Fallback
 - **Reranker:** bge-reranker-v2-m3 (97% Korrektheit) nach Evolution über drei Modell-Generationen
 - **Query Rewriting:** LLM-basiertes Umschreiben von Ich-Form und Folgefragen vor dem Retrieval; Fachbegriffe werden nicht übersetzt
 - **Lauf C:** 5.860 Runs bestätigen — Parameter-Unterschiede sind minimal, Dokumentqualität ist der größte Hebel
-- **Tool Use:** `agent_datum` löst Kalender-Fragen deterministisch in ~1ms, kein LLM, keine Halluzination
+- **Tool Use:** `agent_datum` löst Kalender- und Altersfragen deterministisch, `agent_britannica` als Live-Fallback für Out-of-Domain-Fragen
 - **Chat-History:** SQLite-Persistenz mit HitL-Queue-Button seit 25.06.2026
-- **Läufe D/E/F/G:** Router-Tracking, qwen3-Thinking-Test (kein Vorteil), doppeltes Rewriting gefunden und gefixt, ValueCheck-Konflikt (Diagnostic Score 6) entdeckt und gelöst
+- **Läufe D–G:** Router-Tracking, qwen3-Thinking-Test (kein Vorteil), doppeltes Rewriting gefunden und gefixt, ValueCheck False Positives → Diagnostic Score 6
 
-→ *Vollständige Dokumentation: [susi_08_Produktivbetrieb.md](susi_08_produktivbetrieb.md)*
-
+→ *Pipeline: [susi_08_produktivbetrieb_pipeline.md](susi_08_produktivbetrieb_pipeline.md)*   
+→ *Infrastruktur: [susi_08_produktivbetrieb_infrastruktur.md](susi_08_produktivbetrieb_infrastruktur.md)*   
+→ *Evaluierung: [susi_08_produktivbetrieb_evaluation.md](susi_08_produktivbetrieb_evaluation.md)*    
+  
 
 ---
 
