@@ -20,8 +20,8 @@ ALLES NEU INDEXIEREN:
 
 from langchain_ollama import OllamaEmbeddings
 from langchain_chroma import Chroma
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import TextLoader
+# RecursiveCharacterTextSplitter removed — replaced by split_by_headings()
+# from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from pathlib import Path
 import hashlib
@@ -86,6 +86,131 @@ def remove_comment_blocks(text: str) -> str:
     cleaned = re.sub(pattern, "", text, flags=re.DOTALL)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
+
+
+def split_by_headings(text: str, source: str, max_chunk_chars: int = 1500) -> list[Document]:
+    """
+    Splittet eine Markdown-Datei an jedem ## Heading.
+
+    Jeder Chunk bekommt den Datei-Header (alles vor dem ersten ##)
+    vorangestellt, damit er self-contained ist:
+      - Dateiname/Titel
+      - Datum, Status, Kategorie
+      - Quelle (bei Britannica-Dateien)
+
+    Gefiltert werden:
+      - ## **Stand ...** Footer (SUSIpedia-Konvention)
+      - Leere Sektionen
+
+    Übergroße Chunks (> max_chunk_chars) werden zusätzlich an
+    Absatzgrenzen (\\n\\n) aufgesplittet. Der Header und die
+    Heading-Zeile werden in jeden Sub-Chunk injiziert.
+
+    Fallback: Wenn die Datei keine ## Headings hat, wird der
+    gesamte Text als ein Chunk zurückgegeben (ggf. aufgesplittet).
+    """
+    parts = re.split(r"(?=^## )", text, flags=re.MULTILINE)
+
+    # Header = alles vor dem ersten ## (Titel, Datum, Status etc.)
+    header = parts[0].strip() if parts else ""
+    sections = parts[1:] if len(parts) > 1 else []
+
+    # Fallback: keine ## Headings → ganzer Text als ein Chunk
+    if not sections:
+        content = text.strip()
+        if content:
+            return _split_oversized(content, header, source, max_chunk_chars)
+        return []
+
+    chunks = []
+    for section in sections:
+        section = section.strip()
+        if not section:
+            continue
+        # ## **Stand DD.MM.YYYY** Footer rausfiltern
+        if re.match(r"^## \*\*Stand\b", section):
+            continue
+        # Header + Section = self-contained Chunk
+        content = f"{header}\n\n{section}" if header else section
+        chunks.extend(_split_oversized(content, header, source, max_chunk_chars))
+
+    return chunks
+
+
+def _split_oversized(content: str, header: str, source: str,
+                     max_chars: int) -> list[Document]:
+    """Bricht einen Chunk an Absatzgrenzen (\\n\\n) auf wenn er
+    max_chars überschreitet. Header und Heading-Zeile werden in
+    jeden Sub-Chunk injiziert damit jeder self-contained bleibt.
+    Einzelne Absätze die immer noch zu groß sind werden zusätzlich
+    an Satzgrenzen aufgebrochen."""
+    if len(content) <= max_chars:
+        return [Document(page_content=content, metadata={"source": source})]
+
+    # Heading-Zeile extrahieren (## ...) — wird in jeden Sub-Chunk injiziert
+    lines = content.split("\n", 1)
+    heading_line = lines[0] if lines[0].startswith("## ") else ""
+    body = lines[1].strip() if len(lines) > 1 and heading_line else content
+
+    # An Absatzgrenzen splitten
+    paragraphs = re.split(r"\n\n+", body)
+
+    # Overhead für Header + Heading in jedem Sub-Chunk
+    overhead = len(header) + len(heading_line) + 4
+
+    chunks = []
+    current_parts = []
+    current_len = overhead
+
+    for para in paragraphs:
+        para = para.strip()
+        if not para:
+            continue
+
+        # Einzelner Absatz zu groß → an Satzgrenzen aufbrechen
+        if len(para) + overhead > max_chars:
+            # Erst aktuellen Buffer abschließen
+            if current_parts:
+                _flush_chunk(chunks, current_parts, header, heading_line, source)
+                current_parts = []
+                current_len = overhead
+            # Absatz in Sätze splitten
+            sentences = re.split(r"(?<=\. )", para)
+            for sentence in sentences:
+                sentence = sentence.strip()
+                if not sentence:
+                    continue
+                if current_parts and (current_len + len(sentence) + 1) > max_chars:
+                    _flush_chunk(chunks, current_parts, header, heading_line, source)
+                    current_parts = []
+                    current_len = overhead
+                current_parts.append(sentence)
+                current_len += len(sentence) + 1
+            continue
+
+        added_len = len(para) + 2
+
+        if current_parts and (current_len + added_len) > max_chars:
+            _flush_chunk(chunks, current_parts, header, heading_line, source)
+            current_parts = []
+            current_len = overhead
+
+        current_parts.append(para)
+        current_len += added_len
+
+    if current_parts:
+        _flush_chunk(chunks, current_parts, header, heading_line, source)
+
+    return chunks
+
+
+def _flush_chunk(chunks: list, parts: list, header: str,
+                 heading_line: str, source: str):
+    """Baut einen Chunk aus Parts zusammen und hängt ihn an die Liste."""
+    body_text = "\n\n".join(parts)
+    chunk_parts = [p for p in [header, heading_line, body_text] if p]
+    chunk_content = "\n\n".join(chunk_parts)
+    chunks.append(Document(page_content=chunk_content, metadata={"source": source}))
 
 
 # ── Haupt-Funktion ────────────────────────────────────────────────
@@ -158,23 +283,10 @@ def ingest_docs():
             skipped_blocks += comment_count
             print(f"  🚫 {comment_count} Kommentar-Block(e) übersprungen")
 
-        # Chunk-Größe je nach Ordner-Typ
-        if is_technical(filepath_str):
-            chunk_size    = CHUNK_SIZE_TECH
-            chunk_overlap = CHUNK_OVERLAP_TECH
-        else:
-            chunk_size    = CHUNK_SIZE_DEFAULT
-            chunk_overlap = CHUNK_OVERLAP_DEFAULT
-
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-            separators=["## ", "### ", "\n\n", "\n"]
-        )
-
-        doc = Document(page_content=raw_text, metadata={"source": filepath_str})
-        chunks = splitter.split_documents([doc])
-        chunks = [c for c in chunks if c.page_content.strip()]
+        # Heading-Split: jedes ## wird ein eigener Chunk.
+        # Der Datei-Header (alles vor dem ersten ##) wird in jeden
+        # Chunk injiziert damit jeder Chunk self-contained ist.
+        chunks = split_by_headings(raw_text, filepath_str)
 
         if not chunks:
             print(f"  ⚠️  Keine verwertbaren Chunks – Datei übersprungen")
