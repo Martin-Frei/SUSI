@@ -76,3 +76,7 @@ quick_analyse.py
 
 rag/Test_query.py
 rag/query_old.py
+
+tools/britannica_index.json
+tools/britannica_index.json.bak
+

@@ -93,7 +93,7 @@ Der Auto-Scorer (`auto_scorer.py`) ist das zentrale Werkzeug um den manuellen Be
 | 3 | RAG korrekt ✅ | Richtiger Chunk gefunden, richtige Antwort — das Ziel |
 | 4 | Generation-Problem | Chunk war gut aber LLM hat die Information verloren |
 | 5 | Falscher Chunk | Retrieval hat in die falsche Kategorie gezeigt |
-| 6 | ValueCheck-Konflikt | ValueCheck meldet Fehler, aber BERT/ROUGE zeigen hohe Werte — Grauzone für RAGAS |
+| 6 | ValueCheck-Konflikt | ValueCheck meldet Zahlenfehler, aber BERT/ROUGE zeigen hohe Übereinstimmung — Grauzone |
 
 **Korrektheit** ist definiert als Score ≥ 2 — also alles ab "Training korrekt" aufwärts. Score 3 ist das eigentliche Ziel: RAG hat funktioniert. Score 2 bedeutet das LLM hatte Recht aber aus dem falschen Grund.
 
@@ -101,11 +101,9 @@ Der Auto-Scorer (`auto_scorer.py`) ist das zentrale Werkzeug um den manuellen Be
 
 ```
 1. Ausweich-Phrase erkannt?           → Score 0  (Konfidenz: hoch)
-2. ValueCheck: Referenz-Zahl fehlt oder abweichend?
-   └── Metriken niedrig (BERT < 0.65 oder ROUGE < 0.15)
-                                      → Score 1  (harter Fehler)
-   └── Metriken hoch (BERT > 0.65 UND ROUGE > 0.15)
-                                      → Score 6  (ValueCheck-Konflikt → RAGAS)
+2. ValueCheck: Zahlenwert falsch?
+   └── BERT > 0.65 + ROUGE > 0.15?   → Score 6  (ValueCheck-Konflikt → Grauzone)
+   └── sonst                          → weiter zu Schritt 3
 3. ROUGE-L < 0.05?
    └── max_chunk_rougeL < 0.10?       → Score 5  (falscher Chunk)
    └── max_chunk_bert > 0.70?         → Score 4  (Generation-Problem)
@@ -140,7 +138,7 @@ Der Auto-Scorer wurde nicht einmalig gebaut und dann eingefroren. Jede größere
 
 **Zur Struktur der Smoke-Läufe:** Alle Läufe 1–7 sind Grid-Läufe — dasselbe Set von 4 Testfragen wird über viele Konfigurationskombinationen (Embedding-Modell, Chunk-Größe, Top-K, Prompt) gelaufen. Die Zeilenzahl in der CSV entspricht der Anzahl der Konfigurationsläufe, nicht der Anzahl verschiedener Fragen. Das erlaubt schnelle Parametertests ohne den Aufwand eines vollständigen Evaluierungslaufs. Lauf 8 ist der erste echte Breitenlauf mit 40 verschiedenen Fragen über alle 4 Kategorien.
 
-**Zur Normierung:** Der Ø-Score (normiert) wird berechnet als `mean(score_manuell) ÷ 3`. Korrektheit ist definiert als Anteil der Läufe mit `score_manuell ≥ 2`. Scores 4 und 5 sind valide Auto-Scorer-Kategorien (Generation-Problem bzw. falscher Chunk) und zählen als nicht korrekt. Score 6 (ValueCheck-Konflikt) hat kein Quality-Mapping und wird an RAGAS weitergeleitet.
+**Zur Normierung:** Der Ø-Score (normiert) wird berechnet als `mean(score_manuell) ÷ 3`. Korrektheit ist definiert als Anteil der Läufe mit `score_manuell ≥ 2`. Scores 4 und 5 sind valide Auto-Scorer-Kategorien (Generation-Problem bzw. falscher Chunk) und zählen als nicht korrekt.
 
 ### Lauf 1 — Baseline *(24.05.2026)*
 
@@ -582,19 +580,7 @@ Vorher in `grid_run.py`, `ragas_scorer.py` und `analyse_csv.py` dreifach duplizi
 
 ### Zwei Skalen — klare Trennung
 
-Die Diagnostic Scale (0–6) erklärt *warum* eine Antwort so ist. Die Quality Scale (0–2) beantwortet *ob* sie korrekt ist für den Nutzer. Das Mapping `DIAG_ZU_QUALITAET`: 0→0, 1→0, 2→1, 3→2, 4→0, 5→0, 6→None. Score 6 (ValueCheck-Konflikt) hat kein Quality-Mapping — diese Zeilen gehen als Grauzone an RAGAS. Der Auto-Scorer schreibt nur 0 oder 2 in `score_manuell` — nie 1 automatisch.
-
----
-
-## Lauf G — ValueCheck-Konflikt entdeckt *(15.07.2026)*
-
-Identisches 40-Fragen-Setup wie Lauf F2. Erster Lauf zeigte 70.0% Gesamtkorrektheit — 10 von 12 Nullen waren False Positives durch ValueCheck. Ursache: ValueCheck meldete Fehler wenn die Antwort inhaltlich korrekt war aber andere Zahlendarstellungen verwendete als die Referenz (z.B. „Faktor 18" vs. „52 Prozentpunkte" — beides korrekt, verschiedene Perspektive auf denselben Sachverhalt).
-
-**Fix:** Neuer Diagnostic Score 6 (ValueCheck-Konflikt). Wird vergeben wenn ValueCheck `status="falsch"` meldet aber BERT > 0.65 UND ROUGE > 0.15. Score 6 hat `manuell: True` → RAGAS bewertet in der Grauzone-Phase. Bei niedrigen Metriken bleibt Score 1 (harter Fehler).
-
-**Ergebnisse nach Fix:** 82.4% Gesamtkorrektheit (34 von 40 bewertet, 6 in Grauzone). Bei konservativer Annahme (alle 6 Grauzone-Fragen korrekt) liegt die bereinigte Korrektheit bei ~92%, vergleichbar mit Lauf F2 (92.5%). Router-Accuracy stabil bei 67.5% (27/40). RAGAS löste 16 von 17 Grauzone-Fragen korrekt. Die ~100 Britannica-Artikel in ChromaDB kontaminierten das bestehende Routing nicht.
-
-**Nebenerkenntnisse:** Referenzantwort tech_03 ist veraltet (`chunk_size=300/500` statt produktiv `1000`). Frage proj_05 ist mehrdeutig (Portfolio vs. HouseOfStacks).
+Die Diagnostic Scale (0–6) erklärt *warum* eine Antwort so ist. Die Quality Scale (0–2) beantwortet *ob* sie korrekt ist für den Nutzer. Das Mapping `DIAG_ZU_QUALITAET`: 0→0, 1→0, 2→1, 3→2, 4→0, 5→0, 6→None. Score 6 (ValueCheck-Konflikt) hat kein festes Quality-Mapping — diese Fälle gehen als Grauzone an RAGAS weiter. Der Auto-Scorer schreibt nur 0 oder 2 in `score_manuell` — nie 1 automatisch.
 
 ---
 
@@ -610,13 +596,11 @@ Identisches 40-Fragen-Setup wie Lauf F2. Erster Lauf zeigte 70.0% Gesamtkorrekth
 
 **Router-Accuracy ~70%:** Kategorie `technisch` mit 60% am schwächsten. Inhaltlicher Ausbau `docs/technik/` ist der primäre Hebel.
 
-**agent_datum Zweig 2:** Fragen mit Entitätsbezug ("Wie alt ist SUSI?") brauchen Datum aus retrievtem Chunk + Python-Berechnung. Noch offen.
+**agent_datum Zweig 2:** Teilweise gelöst (17.07.). Alters-Fragen für Personen mit genau einem Datum im Chunk (Martin, Philip, Jakob, SUSI) funktionieren zuverlässig — Multi-Chunk-Suche, Entity-scoped Section-Split, Typo-Toleranz via rewritten Query. Limitation: bei Entitäten mit mehreren Daten im Chunk (Python, historische Themen) greift Zweig 2 das falsche Datum. Bei zusammengesetzten Entitäten ("die erste Vollversion") versagt die Entitätserkennung. Wird erst angegangen wenn `agent_pedia` stabil ist.
 
 **`ragas_scorer.py` Stacked-CSV-Bug:** verliert `auto_score`-Werte bei gestapelten CSVs. Fix ausstehend.
 
 **`--nachbewertung` Skala:** akzeptiert 0–2, System nutzt Diagnostic 0–6. Vereinheitlichung ausstehend.
-
-**`ragas_scorer.py` und `analyse_csv.py` — lokale `DIAG_ZU_QUALITAET` Duplikate:** Müssen um Score 6 erweitert werden (Hygiene-Refactoring, nicht blockierend).
 
 ---
 

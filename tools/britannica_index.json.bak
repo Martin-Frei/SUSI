@@ -1,11 +1,11 @@
 {
   "meta": {
     "created": "2026-07-14",
-    "last_full_fetch": "2026-07-14",
+    "last_full_fetch": "2026-07-16",
     "total_articles": 0,
-    "total_fetched": 43,
+    "total_fetched": 221,
     "key_used": "key1",
-    "last_updated": "2026-07-14 08:31:49.035765"
+    "last_updated": "2026-07-16 10:45:34.785043"
   },
   "articles": {
     "134": {
@@ -991,6 +991,1190 @@
       "file": "britannica_science_003.md",
       "fetched": "2026-07-14",
       "url": "https://www.britannica.com/article/restriction-enzyme/2525"
+    },
+    "2531": {
+      "title": "factor",
+      "lastUpdated": "2025-11-03",
+      "category": "science",
+      "file": "britannica_science_003.md",
+      "fetched": "2026-07-14",
+      "url": "https://www.britannica.com/article/factor/2531"
+    },
+    "2535": {
+      "title": "human leukocyte antigen",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_003.md",
+      "fetched": "2026-07-14",
+      "url": "https://www.britannica.com/article/human-leukocyte-antigen/2535"
+    },
+    "2547": {
+      "title": "Gestalt therapy",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_003.md",
+      "fetched": "2026-07-14",
+      "url": "https://www.britannica.com/article/Gestalt-therapy/2547"
+    },
+    "2739": {
+      "title": "bovine spongiform encephalopathy",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_003.md",
+      "fetched": "2026-07-14",
+      "url": "https://www.britannica.com/article/bovine-spongiform-encephalopathy/2739"
+    },
+    "2749": {
+      "title": "dimension",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_003.md",
+      "fetched": "2026-07-14",
+      "url": "https://www.britannica.com/article/dimension/2749"
+    },
+    "3018": {
+      "title": "apoptosis",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_003.md",
+      "fetched": "2026-07-14",
+      "url": "https://www.britannica.com/article/apoptosis/3018"
+    },
+    "3104": {
+      "title": "tumor suppressor gene",
+      "lastUpdated": "2025-08-27",
+      "category": "science",
+      "file": "britannica_science_003.md",
+      "fetched": "2026-07-14",
+      "url": "https://www.britannica.com/article/tumor-suppressor-gene/3104"
+    },
+    "3135": {
+      "title": "carpal tunnel syndrome",
+      "lastUpdated": "2026-04-06",
+      "category": "science",
+      "file": "britannica_science_003.md",
+      "fetched": "2026-07-14",
+      "url": "https://www.britannica.com/article/carpal-tunnel-syndrome/3135"
+    },
+    "3282": {
+      "title": "abdominal cavity",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/abdominal-cavity/3282"
+    },
+    "3283": {
+      "title": "abdominal muscle",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/abdominal-muscle/3283"
+    },
+    "3286": {
+      "title": "abductor muscle",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/abductor-muscle/3286"
+    },
+    "3334": {
+      "title": "constant of aberration",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/aberration-constant-of/3334"
+    },
+    "3353": {
+      "title": "abietic acid",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/abietic-acid/3353"
+    },
+    "3372": {
+      "title": "ABO blood group system",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/ABO-blood-group-system/3372"
+    },
+    "3376": {
+      "title": "abortion",
+      "lastUpdated": "2026-05-15",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/abortion/3376"
+    },
+    "3395": {
+      "title": "abscess",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/abscess/3395"
+    },
+    "3400": {
+      "title": "absolute zero",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/absolute-zero/3400"
+    },
+    "3403": {
+      "title": "absorption",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/absorption/3403"
+    },
+    "3444": {
+      "title": "abyssal hill",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/abyssal-hill/3444"
+    },
+    "3445": {
+      "title": "abyssal plain",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/abyssal-plain/3445"
+    },
+    "3446": {
+      "title": "abyssal zone",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/abyssal-zone/3446"
+    },
+    "3458": {
+      "title": "Acadian orogeny",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/Acadian-orogeny/3458"
+    },
+    "3468": {
+      "title": "acatalasia",
+      "lastUpdated": "2024-12-24",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acatalasia/3468"
+    },
+    "3469": {
+      "title": "acceleration",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acceleration/3469"
+    },
+    "3470": {
+      "title": "acceleration stress",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acceleration-stress/3470"
+    },
+    "3479": {
+      "title": "accessory mineral",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/accessory-mineral/3479"
+    },
+    "3485": {
+      "title": "acclimatization",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acclimatization/3485"
+    },
+    "3499": {
+      "title": "acervulus",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acervulus/3499"
+    },
+    "3501": {
+      "title": "Acetabularia",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/Acetabularia/3501"
+    },
+    "3502": {
+      "title": "acetaldehyde",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acetaldehyde/3502"
+    },
+    "3503": {
+      "title": "acetaminophen",
+      "lastUpdated": "2025-09-25",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acetaminophen/3503"
+    },
+    "3504": {
+      "title": "acetanilide",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acetanilide/3504"
+    },
+    "3505": {
+      "title": "acetic acid",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acetic-acid/3505"
+    },
+    "3506": {
+      "title": "acetone",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acetone/3506"
+    },
+    "3508": {
+      "title": "acetophenone",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acetophenone/3508"
+    },
+    "3509": {
+      "title": "acetylcholine",
+      "lastUpdated": "2024-12-03",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acetylcholine/3509"
+    },
+    "3510": {
+      "title": "acetylene",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acetylene/3510"
+    },
+    "3525": {
+      "title": "achene",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/achene/3525"
+    },
+    "3535": {
+      "title": "Achilles tendon",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/Achilles-tendon/3535"
+    },
+    "3541": {
+      "title": "achondrite",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/achondrite/3541"
+    },
+    "3542": {
+      "title": "achondroplasia",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/achondroplasia/3542"
+    },
+    "3543": {
+      "title": "acid",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acid/3543"
+    },
+    "3544": {
+      "title": "felsic and mafic rocks",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/felsic-and-mafic-rocks/3544"
+    },
+    "3545": {
+      "title": "acid-base catalysis",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acid-base-catalysis/3545"
+    },
+    "3547": {
+      "title": "acid dye",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acid-dye/3547"
+    },
+    "3548": {
+      "title": "acid halide",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acid-halide/3548"
+    },
+    "3549": {
+      "title": "acid rain",
+      "lastUpdated": "2026-02-05",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acid-rain/3549"
+    },
+    "3550": {
+      "title": "acidosis",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acidosis/3550"
+    },
+    "3556": {
+      "title": "acne",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acne/3556"
+    },
+    "3572": {
+      "title": "acoustic impedance",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acoustic-impedance/3572"
+    },
+    "3574": {
+      "title": "acoustic neuroma",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acoustic-neuroma/3574"
+    },
+    "3575": {
+      "title": "acoustic trauma",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acoustic-trauma/3575"
+    },
+    "3577": {
+      "title": "acquired character",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acquired-character/3577"
+    },
+    "3579": {
+      "title": "Acrasieae",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/Acrasieae/3579"
+    },
+    "3581": {
+      "title": "acre",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acre/3581"
+    },
+    "3583": {
+      "title": "acriflavine",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acriflavine/3583"
+    },
+    "3585": {
+      "title": "acrocephalosyndactyly",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acrocephalosyndactyly/3585"
+    },
+    "3586": {
+      "title": "acrocyanosis",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_004.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acrocyanosis/3586"
+    },
+    "3588": {
+      "title": "acromegaly",
+      "lastUpdated": "2025-07-09",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acromegaly/3588"
+    },
+    "3593": {
+      "title": "acrylic compound",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acrylic-compound/3593"
+    },
+    "3598": {
+      "title": "actin",
+      "lastUpdated": "2026-03-26",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/actin/3598"
+    },
+    "3601": {
+      "title": "actinium",
+      "lastUpdated": "2025-01-24",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/actinium/3601"
+    },
+    "3602": {
+      "title": "actinium series",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/actinium-series/3602"
+    },
+    "3603": {
+      "title": "actinolite",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/actinolite/3603"
+    },
+    "3604": {
+      "title": "actinometer",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/actinometer/3604"
+    },
+    "3605": {
+      "title": "actinomycete",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/actinomycete/3605"
+    },
+    "3606": {
+      "title": "actinomycosis",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/actinomycosis/3606"
+    },
+    "3607": {
+      "title": "actinomyxidian",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/actinomyxidian/3607"
+    },
+    "3608": {
+      "title": "action",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/action/3608"
+    },
+    "3611": {
+      "title": "action potential",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/action-potential/3611"
+    },
+    "3614": {
+      "title": "activation",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/activation/3614"
+    },
+    "3615": {
+      "title": "activation energy",
+      "lastUpdated": "2025-11-14",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/activation-energy/3615"
+    },
+    "3616": {
+      "title": "activity",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/activity/3616"
+    },
+    "3617": {
+      "title": "activity coefficient",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/activity-coefficient/3617"
+    },
+    "3626": {
+      "title": "acupuncture",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/acupuncture/3626"
+    },
+    "3688": {
+      "title": "adaptation",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/adaptation/3688"
+    },
+    "3689": {
+      "title": "adaptive radiation",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/adaptive-radiation/3689"
+    },
+    "3701": {
+      "title": "Addison disease",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/Addison-disease/3701"
+    },
+    "3704": {
+      "title": "adductor muscle",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/adductor-muscle/3704"
+    },
+    "3720": {
+      "title": "adenine",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/adenine/3720"
+    },
+    "3721": {
+      "title": "adenoids",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/adenoids/3721"
+    },
+    "3722": {
+      "title": "adenosine triphosphate",
+      "lastUpdated": "2025-09-03",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/adenosine-triphosphate/3722"
+    },
+    "3723": {
+      "title": "adenovirus",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/adenovirus/3723"
+    },
+    "3731": {
+      "title": "adiabatic demagnetization",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/adiabatic-demagnetization/3731"
+    },
+    "3732": {
+      "title": "adiabatic process",
+      "lastUpdated": "2025-04-29",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/adiabatic-process/3732"
+    },
+    "3738": {
+      "title": "adipose cell",
+      "lastUpdated": "2025-07-09",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/adipose-cell/3738"
+    },
+    "3766": {
+      "title": "adolescence",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/adolescence/3766"
+    },
+    "3782": {
+      "title": "adrenal gland",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/adrenal-gland/3782"
+    },
+    "3783": {
+      "title": "adrenergic drug",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/adrenergic-drug/3783"
+    },
+    "3784": {
+      "title": "adrenergic nerve fibre",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/adrenergic-nerve-fibre/3784"
+    },
+    "3785": {
+      "title": "adrenocorticotropic hormone",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/adrenocorticotropic-hormone/3785"
+    },
+    "3786": {
+      "title": "congenital adrenal hyperplasia",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/congenital-adrenal-hyperplasia/3786"
+    },
+    "3800": {
+      "title": "adsorption",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/adsorption/3800"
+    },
+    "3802": {
+      "title": "adularia",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/adularia/3802"
+    },
+    "3807": {
+      "title": "adulthood",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/adulthood/3807"
+    },
+    "3811": {
+      "title": "advection",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/advection/3811"
+    },
+    "3818": {
+      "title": "advertising coloration",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/advertising-coloration/3818"
+    },
+    "3832": {
+      "title": "aecium",
+      "lastUpdated": "2024-10-28",
+      "category": "science",
+      "file": "britannica_science_005.md",
+      "fetched": "2026-07-16",
+      "url": "https://www.britannica.com/article/aecium/3832"
+    },
+    "557": {
+      "title": "barkentine",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/barkentine/557"
+    },
+    "576": {
+      "title": "Beyer-Garratt",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/Beyer-Garratt/576"
+    },
+    "579": {
+      "title": "binder",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/binder/579"
+    },
+    "662": {
+      "title": "cerebral angiography",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/cerebral-angiography/662"
+    },
+    "671": {
+      "title": "chiffon",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/chiffon/671"
+    },
+    "717": {
+      "title": "cyanide process",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/cyanide-process/717"
+    },
+    "720": {
+      "title": "cylinder machine",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/cylinder-machine/720"
+    },
+    "749": {
+      "title": "diphosgene",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/diphosgene/749"
+    },
+    "775": {
+      "title": "electroscope",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/electroscope/775"
+    },
+    "798": {
+      "title": "fish-finder",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/fish-finder/798"
+    },
+    "800": {
+      "title": "Floating Instrument Platform",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/Floating-Instrument-Platform/800"
+    },
+    "812": {
+      "title": "French 75",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/French-75/812"
+    },
+    "830": {
+      "title": "Geneva mechanism",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/Geneva-mechanism/830"
+    },
+    "836": {
+      "title": "gingerbread",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/gingerbread/836"
+    },
+    "837": {
+      "title": "girandole",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/girandole/837"
+    },
+    "889": {
+      "title": "horse collar",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/horse-collar/889"
+    },
+    "903": {
+      "title": "imprinting",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/imprinting/903"
+    },
+    "946": {
+      "title": "knocking",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/knocking/946"
+    },
+    "956": {
+      "title": "lantern of the dead",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/lantern-of-the-dead/956"
+    },
+    "1020": {
+      "title": "Monel",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/Monel/1020"
+    },
+    "1038": {
+      "title": "Muntz metal",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/Muntz-metal/1038"
+    },
+    "1095": {
+      "title": "p-n junction",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/p-n-junction/1095"
+    },
+    "1129": {
+      "title": "Phonofilm",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/Phonofilm/1129"
+    },
+    "1165": {
+      "title": "proving ground",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/proving-ground/1165"
+    },
+    "1167": {
+      "title": "proximity fuze",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/proximity-fuze/1167"
+    },
+    "1181": {
+      "title": "reactive dye",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/reactive-dye/1181"
+    },
+    "1182": {
+      "title": "reactor",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/reactor/1182"
+    },
+    "1203": {
+      "title": "Rolleiflex",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/Rolleiflex/1203"
+    },
+    "1204": {
+      "title": "roller printing",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/roller-printing/1204"
+    },
+    "1226": {
+      "title": "sakia",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/sakia/1226"
+    },
+    "1239": {
+      "title": "sawing machine",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/sawing-machine/1239"
+    },
+    "1284": {
+      "title": "solar",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/solar/1284"
+    },
+    "1361": {
+      "title": "Tu-16",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/Tu-16/1361"
+    },
+    "1382": {
+      "title": "virtual reality",
+      "lastUpdated": "2025-10-21",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/virtual-reality/1382"
+    },
+    "1401": {
+      "title": "whaleboat",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/whaleboat/1401"
+    },
+    "1430": {
+      "title": "CD-ROM",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/CD-ROM/1430"
+    },
+    "1441": {
+      "title": "rustication",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/rustication/1441"
+    },
+    "1458": {
+      "title": "Internet",
+      "lastUpdated": "2026-01-12",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/Internet/1458"
+    },
+    "1459": {
+      "title": "interactive media",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/interactive-media/1459"
+    },
+    "1466": {
+      "title": "lithopone",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/lithopone/1466"
+    },
+    "1488": {
+      "title": "optical storage",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/optical-storage/1488"
+    },
+    "1489": {
+      "title": "operating system",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/operating-system/1489"
+    },
+    "1491": {
+      "title": "optical axis",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/optical-axis/1491"
+    },
+    "1494": {
+      "title": "monolithic filter",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/monolithic-filter/1494"
+    },
+    "1510": {
+      "title": "Turing machine",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/Turing-machine/1510"
+    },
+    "1511": {
+      "title": "Turing test",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/Turing-test/1511"
+    },
+    "1514": {
+      "title": "workstation",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/workstation/1514"
+    },
+    "1523": {
+      "title": "Midas",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/Midas/1523"
+    },
+    "1527": {
+      "title": "Harmonic Drive",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/Harmonic-Drive/1527"
+    },
+    "1563": {
+      "title": "e-mail",
+      "lastUpdated": "2024-10-28",
+      "category": "unknown",
+      "file": "britannica_unknown_001.md",
+      "fetched": "2026-07-17",
+      "url": "https://www.britannica.com/article/e-mail/1563"
     }
   }
 }
