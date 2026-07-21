@@ -6,6 +6,11 @@
 from __future__ import annotations
 from pathlib import Path
 
+# Minimum Reranker-Score damit der Router ein Profil wählt.
+# Alles darunter ist Rauschen — Fallback greift.
+# bge-reranker-v2-m3 Logit-Skala: 0–0.5 = irrelevant, 2+ = guter Match
+ROUTER_MIN_SCORE = 0.5
+
 
 # ── Profil-Auswahl via Reranker-Voting ────────────────────────────
 
@@ -26,6 +31,7 @@ def get_profile(ranked_docs: list, folder_profile_map: dict, profiles: dict,
     Edge-Cases:
         - Keine Chunks: erstes Profil in profiles wird genutzt
         - Alle Scores <= 0.01: fallback_profile greift (kein Signal aus Retrieval)
+            Neuer Test: <= 0.5 greift als Schwellenwert 
           Das passiert wenn ChromaDB zwar Chunks findet, der Reranker aber alle
           als irrelevant einstuft — z.B. bei Fragen außerhalb der SUSIpedia.
     """
@@ -44,9 +50,9 @@ def get_profile(ranked_docs: list, folder_profile_map: dict, profiles: dict,
     # Edge-Case: alle Scores nahe 0 → kein Signal → Fallback
     # Verhindert zufällige Profil-Auswahl bei irrelevanten Chunks
     max_score = max(profil_gewichte.values())
-    if max_score <= 0.01:
+    if max_score <= ROUTER_MIN_SCORE:
         fallback = fallback_profile if fallback_profile in profiles else next(iter(profiles))
-        print(f"  ⚠️  Alle Scores <= 0.01 — kein Signal — Fallback: {fallback}")
+        print(f"  ⚠️  Alle Scores <= {ROUTER_MIN_SCORE} — kein Signal — Fallback: {fallback}")
         return fallback, profiles[fallback]
 
     gewinner = max(profil_gewichte, key=lambda p: profil_gewichte[p])
