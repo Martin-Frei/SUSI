@@ -12,8 +12,9 @@ Frage des Nutzers
        ↓
 detect_language()                                    [lokal, LLM, num_ctx=128]
        ↓
-agent_datum Guard: Reine Kalenderfrage?              [lokal, deterministisch]
-  ├─ Ja (mode=auto|manuell, lang=de) → Python datetime → Antwort ~1ms
+agent_datum Guard: Kalenderfrage oder Altersberechnung?  [lokal, deterministisch]
+  ├─ Zweig 1: Kalender-Op + lang=de → Python datetime → Antwort ~1ms
+  ├─ Zweig 2: "Wie alt ist X?" → Datum aus Chunk + Python → Antwort ~3s
   └─ Nein → normale Pipeline weiter
        ↓
 Query Rewriting löst Ich-Form und Folgefragen auf   [lokal, LLM]
@@ -22,9 +23,11 @@ Embedding-Modell wandelt Frage in Vektor um         [lokal]
        ↓
 ChromaDB sucht die ähnlichsten Wissens-Chunks       [lokal]
        ↓
-Reranker (bge-reranker-v2-m3) sortiert Top 3        [lokal, CPU]
+Reranker (bge-reranker-v2-m3) sortiert Top 3        [lokal, CPU, max 1500 chars/Chunk]
        ↓
-Router: Reranker-Score-Summe pro Kategorie → Profil  [lokal]
+Score ≤ 0.5? (ROUTER_MIN_SCORE Gate)
+  ├─ Ja → agent_britannica: Live-API-Fetch + LLM    [extern, gecacht]
+  └─ Nein → Router: Reranker-Score-Summe pro Kategorie → Profil  [lokal]
        ↓
 Kontext + Original-Frage + System-Prompt
        ↓
@@ -33,7 +36,7 @@ LLM generiert die Antwort                           [lokal]
 Antwort an den Nutzer
 ```
 
-Alle Komponenten laufen lokal. Kein einziger Byte verlässt das System.
+Alle Kern-Komponenten laufen lokal. Einzige Ausnahme: `agent_britannica` fragt bei Out-of-Domain-Fragen die Britannica-API — der Artikel wird lokal gecacht und beim nächsten Ingest Teil der SUSIpedia.
 
 ---
 
@@ -61,7 +64,7 @@ LangChain verbindet Embedding-Modell, ChromaDB und LLM mit minimalem Boilerplate
 
 ### susi_config.yaml — Single Source of Truth
 
-Alle Parameter werden zentral in `rag/susi_config.yaml` verwaltet.
+Es werden alle Parameter zentral in `rag/susi_config.yaml` verwaltet.
 Ingest, Query und Views lesen alle aus dieser Config — keine hardcodierten Werte mehr.
 Modellwechsel, Chunk-Größen oder Prompt-Änderungen sind ein Edit in einer Datei.
 
@@ -111,6 +114,8 @@ bge-m3 gilt als stärkster Allrounder mit besserer deutscher Sprachverarbeitung.
 
 **Stand Evaluation (Mai/Juni 2026):** `chunk_size=1000, overlap=50` wird im Grid-Lauf getestet — deutlich größere Chunks um mehr Kontext pro Retrieval zu liefern.
 
+**Stand Produktivbetrieb (Juli 2026):** `RecursiveCharacterTextSplitter` wurde durch `split_by_headings()` in `ingest.py` ersetzt. Jedes `##`-Heading ergibt exakt einen Chunk. Der Datei-Header wird in jeden Chunk injiziert — self-contained. `_split_oversized()` bricht Chunks über 1500 chars an Absatz- und Satzgrenzen auf. Ergebnis: 1176 Chunks, Ø 641 chars, kein Chunk über 1500 chars. Wichtig: die Chunk-Grenzen folgen jetzt der semantischen Dokumentstruktur statt einer fixen Zeichenzahl.
+
 → *Optimaler Wert nach Grid-Lauf — siehe [susi_04_evaluation.md](susi_04_evaluation.md)*
 
 ### Top-K (Anzahl retrievter Chunks)
@@ -139,9 +144,7 @@ bge-m3 gilt als stärkster Allrounder mit besserer deutscher Sprachverarbeitung.
 
 **Stand Evaluation (Mai/Juni 2026):** qwen2.5-coder:7b und llama3.1:8b wurden verglichen. `gemma2:9b` und `mistral-nemo:12b` wurden in frühen Plänen erwähnt aber nie formal evaluiert.
 
-**Stand Produktivbetrieb (Juli 2026):** `qwen2.5-coder:7b` ist primäres Modell (Fakten, Code, alle Profile außer lernen und persoenlich). `llama3.1:8b` für Profil `lernen`. `qwen2.5:7b` — bewusst *ohne* `-coder`-Suffix, die multilinguale Basisvariante — für Profil `persoenlich`. `qwen3:8b` und `qwen3:14b` getestet in Lauf E — kein signifikanter Vorteil gegenüber qwen2.5-coder:7b.
-
-**Warum zwei verschiedene qwen2.5-Varianten:** `qwen2.5-coder:7b` und `qwen2.5:7b` sind unterschiedliche Modelle, keine Tippvariante desselben. Der Coder-Fokus zahlt sich bei Fakten- und Code-lastigen Kategorien aus (susi, projekte, technik) — genau dort ist `qwen2.5-coder:7b` produktiv. Für `persoenlich` zählt dagegen zuverlässige Mehrsprachigkeit mehr als Code-Präzision: `qwen2.5:7b` ist die multilinguale Basisvariante und läuft deshalb dort sowie als Fallback-Profil bei fremdsprachigen Fragen außerhalb der SUSIpedia.
+**Stand Produktivbetrieb (Juli 2026):** `qwen2.5-coder:7b` ist primäres Modell (Fakten, Code, alle Profile außer lernen, persoenlich und wissen). `llama3.1:8b` für Profil `lernen` und `wissen`. `qwen2.5:7b` für Profil `persoenlich` (multilingual). `qwen3:8b` und `qwen3:14b` getestet in Lauf E — kein signifikanter Vorteil gegenüber qwen2.5-coder:7b.
 
 → *Details: [susi_04_evaluation.md](susi_04_evaluation.md), [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
 
@@ -157,14 +160,6 @@ Die Sprachinstruktion (`lang_instruction`) wird dynamisch generiert und erschein
 
 ---
 ## Neue Pipeline-Stufen *(Produktivbetrieb Juni 2026)*
-
-### Language Detection
-
-`detect_language()` läuft als erste Stufe der Pipeline, noch vor dem agent_datum-Guard. Ein LLM-Call mit ISO 639-1-Code als Ausgabe, `num_ctx=128` und `temperature=0.0` — kurz und günstig, weil nur ein Zwei-Buchstaben-Code erzeugt wird. Das Ergebnis steuert später sowohl den agent_datum-Guard (nur aktiv bei `lang="de"`) als auch die `lang_instruction` vor der finalen Antwortgenerierung.
-
-### agent_datum — Tool-Use-Guard vor dem RAG-Router
-
-Direkt nach der Spracherkennung prüft `agent_datum.py` deterministisch ob eine Frage eine reine Kalender-Operation ist. Drei Bedingungen müssen erfüllt sein: konkreter Datumsanker, klare Kalender-Operation, kein SUSIpedia-Entitätsname. Sind alle drei erfüllt, rechnet Python `datetime` die Antwort in ~1ms, ohne LLM und ohne Retrieval. Im Zweifel läuft die normale Pipeline weiter. Das ist die praktische Umsetzung des Prinzips "Sprachmodelle sollen routen und generieren, nicht rechnen" — Details dazu in Kapitel 06, Grenzerfahrung 7.
 
 ### Query Rewriting
 
@@ -202,17 +197,11 @@ Frage rein
 → Profil gewinnt
 
 
-Fünf Profile: susi, projekte, lernen, persoenlich, technik    
+Fünf Router-Profile plus ein Wissens-Profil: susi, projekte, lernen, persoenlich, technik, wissen    
 → jedes mit eigenem LLM, top_k, top_n und Temperature.     
-Bei Fragen außerhalb der SUSIpedia greift ein Fallback-Profil.
+Bei Fragen außerhalb der SUSIpedia greift `agent_britannica` als Live-Fallback (ROUTER_MIN_SCORE ≤ 0.5).
 
 *Details: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
-
----
-
-### Betriebsmodi und Chat-History
-
-Ein Modus-Toggle im Chat-Header schaltet zwischen AUTO, MANUELL und CHUNKING (vorher „CODING", umbenannt im Zuge des Manuell-Modus-Ausbaus). AUTO ist der Standard-Produktivmodus mit aktivem Router; MANUELL erlaubt Router-Bypass mit chatgebundenen Parametern (`chat.manuell_settings`); CHUNKING ist als künftiger Dokument-Aufbereitungsmodus für `ingest.py` definiert, aber noch nicht implementiert. Der gesamte Chatverlauf wird persistent in SQLite gehalten (`Chat`, `Message`, `QueueItem`) statt in der Django-Session — kein Datenverlust bei Ollama-Crashes oder Browser-Schließen. Details zu beidem: Kapitel 08.
 
 ---
 
@@ -322,21 +311,23 @@ LoRA ist kein neues Konzept — es taucht in der Literatur regelmäßig auf. Der
 | Komponente | |
 |------------|-----------------|
 | Embedding | bge-m3 |
-| Vector Store | ChromaDB (617 Chunks) |
-| Chunk-Größe | 1000/50 |
+| Vector Store | ChromaDB (1176 Chunks) |
+| Chunking | split_by_headings() + _split_oversized (max 1500 chars) |
 | Retrieval | similarity |
 | Reranker | BAAI/bge-reranker-v2-m3 (CPU, 97%) |
-| Router | Retrieval-getrieben, 5 Profile |
+| Router | Retrieval-getrieben, 6 Profile (inkl. wissen) |
+| Router-Schwellenwert | ROUTER_MIN_SCORE = 0.5 |
 | Language Detection | aktiv (ISO 639-1, num_ctx=128) |
 | Query Rewriting | aktiv (Ich-Form, Folgefragen, keine Übersetzung Fachbegriffe) |
-| Tool Use | agent_datum (Kalender-Guard, ~1ms, kein LLM) |
+| Tool Use | agent_datum (Kalender + Altersberechnung), agent_britannica (Live-Fallback) |
 | LLM primär | qwen2.5-coder:7b (susi, projekte, technik) |
-| LLM sekundär | llama3.1:8b (lernen) |
+| LLM sekundär | llama3.1:8b (lernen, wissen) |
 | LLM multilingual | qwen2.5:7b (persoenlich, Fallback) |
-| Modus | AUTO / MANUELL / CHUNKING Toggle |
+| Modus | AUTO / MANUELL / CODING Toggle |
 | Config | susi_config.yaml (Single Source of Truth) |
 | Chat-History | SQLite (Chat, Message, QueueItem) seit 25.06.2026 |
-| Auto-Save | deaktiviert (Mai 2026) — Kurzzeitgedächtnis + HitL-Queue-Button aktiv seit 25.06.2026, automatisierter Türsteher und async Worker geplant Q3 2026 |
+| Auto-Save | deaktiviert (Mai 2026) — HitL-Button aktiv, async Worker Q3 2026 |
+| Query-Pipeline | 5 Module: config.py, keywords.py, llm_client.py, utils.py, query.py |
 
 ---
 

@@ -39,6 +39,12 @@ docs/
 │   ├── spv2/
 │   └── pc_umbau/
 │
+├── wissen/                            ← NEU (Juli 2026) — Britannica + Wikipedia
+│   ├── britannica_science_001.md      ← 50 Artikel pro Datei, je ## = 1 Chunk
+│   ├── britannica_science_002.md
+│   ├── wikipedia_python.md            ← einzelne Artikel, Wiki-Headings konvertiert
+│   └── ...
+│
 ├── technik/                           ← Technische Konfiguration
 ├── lernen/                            ← Lernmaterial [nicht öffentlich]
 ├── martin/                            ← Persönliche Daten [nicht öffentlich]
@@ -50,9 +56,9 @@ docs/
 └── persoenlich/
 ```
 
-**Stand Juni 2026:** Die Wissensbasis umfasst 124 Dateien mit 617 Chunks in ChromaDB. 
+**Stand Juli 2026:** Die Wissensbasis umfasst 1176 Chunks in ChromaDB. 
 Die vollständige Überarbeitung nach den Formatierungsregeln hat die Retrieval Hit Rate 
-von 36% auf 91% angehoben. Davon sind `coding/`, `projekte/`, `technik/` und `susi/` 
+von 36% auf 91% angehoben. Seit Juli 2026 enthält `docs/wissen/` Encyclopaedia-Britannica- und Wikipedia-Artikel als externe Wissensquelle — das Router-Profil `wissen` nutzt `llama3.1:8b` für diese Kategorie. Britannica-Artikel werden durch `britannica_sync.py` als Batch oder durch `agent_britannica` als Live-Fallback gecacht: jede Out-of-Domain-Frage die SUSI nicht beantworten kann wird zum Anlass die Wissensbasis inkrementell zu erweitern. Die Ordner `coding/`, `projekte/`, `technik/` und `susi/` sind 
 öffentlich auf GitHub einsehbar. Alle anderen Bereiche sind bewusst ausgeschlossen.
 
 Die Datei `docs/martin/ich_bin_martin.md` enthält Selbstreferenz-Sätze wie 
@@ -173,20 +179,20 @@ docs/coding/            ✅ öffentlich
 docs/technik/           ✅ öffentlich
 docs/susipedia_formatierungsregeln.md  ✅ öffentlich
 docs/susi_vision.md     ✅ öffentlich
+docs/tree.md            ✅ öffentlich — zeigt die Struktur ohne sensible Inhalte
 ```
-
-`docs/tree.md` wurde am 20.06.2026 als veraltet gelöscht (siehe Kapitel 08) und ist daher nicht mehr Teil der öffentlichen Struktur.
 
 ### Was nicht öffentlich ist
 
 ```
 docs/martin/            ❌ Lebenslauf, Ziele, Profil
 docs/familie/           ❌ Familiäre Daten
-docs/job/               ❌ Bewerbungen, Jobsuche (inkl. ehemaligem skills/, seit Umstrukturierung integriert)
+docs/job/               ❌ Bewerbungen, Jobsuche
 docs/lernen/            ❌ Interview-Vorbereitung, persönliche Lernmaterialien
 docs/hobbys/            ❌ Persönliche Interessen
 docs/tagebuch/          ❌ Persönliche Reflexionen
 docs/persoenlich/       ❌ Private Gedanken
+docs/skills/            ❌ Bewerbungs-Skills
 docs/finanzen/          ❌ Finanzielle Daten
 docs/wohnen/            ❌ Wohnsituation
 docs/freunde/           ❌ Kontakte
@@ -207,10 +213,9 @@ docs/*
 !docs/coding/**
 !docs/technik/
 !docs/technik/**
-!docs/susi/
-!docs/susi/**
 !docs/susipedia_formatierungsregeln.md
 !docs/susi_vision.md
+!docs/tree.md
 ```
 
 Der Vorteil: Neue Ordner in `docs/` werden automatisch ignoriert ohne dass `.gitignore` angepasst werden muss. Das Sicherheitsprinzip gilt also auch für zukünftige Inhalte.

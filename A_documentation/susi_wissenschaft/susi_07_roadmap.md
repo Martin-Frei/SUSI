@@ -1,5 +1,5 @@
 # 07 — Roadmap
-### SUSI Entwicklungsbericht · Stand Juni 2026
+### SUSI Entwicklungsbericht · Stand Juli 2026
 
 ---
 
@@ -49,18 +49,29 @@ bge-reranker-v2-m3 produktiv. Läuft auf CPU, kein VRAM-Verbrauch.
 
 ### Metriken-Konsistenz im Evaluator absichern
 
-❌ Metriken-Konsistenz im Evaluator absichern *(in Arbeit)*
-Der Skalenfehler aus den frühen Läufen darf sich nicht wiederholen. `MAX_SCORE = 6` und 
-`KORREKT_THRESHOLD` werden als explizite Konstanten in `evaluator.py` verankert. 
-Jede CSV-Ausgabe enthält diese Werte als Metadaten-Spalten. Zusätzlich: 
-Nachbewertungs-Skala (`--nachbewertung`) mit dem System vereinheitlichen (0–3).
-`ragas_scorer.py` und `analyse_csv.py` müssen ihre lokalen `DIAG_ZU_QUALITAET`-Duplikate um Score 6 (ValueCheck-Konflikt → None) erweitern.
+✅ **Teilweise gelöst (Juli 2026).** `DIAG_ZU_QUALITAET` ist als zentrale Konstante in 
+`auto_scorer.py` verankert und wird von `grid_run.py` importiert. Die Diagnostic Scale 
+wurde auf 0–6 erweitert (Score 6: ValueCheck-Konflikt → Grauzone). `MAX_SCORE = 6` 
+steht im Code. Offen: `--nachbewertung` akzeptiert noch 0–2 statt die Diagnostic Scale, 
+CSV-Metadaten enthalten `MAX_SCORE` noch nicht als Spalte.
+
+### Asynchronen Worker für Modellwechsel
+
+**`!save`-Befehl implementieren:** Der explizite Speicher-Trigger existiert noch nicht. Die aktuelle Auto-Save-Pipeline speichert automatisch — das Gegenteil des gewünschten Verhaltens. `!save` als Frontend-Befehl implementieren, einen asynchronen Django-Task (Django-Q oder Celery) anschließen, und HTMX Polling für Statusmeldungen ("Lade Modell...", "Erstelle Zusammenfassung...", "Bereit für Review") einbauen. Der Nutzer wird nicht allein gelassen.
+
+
+❌ Asynchronen Worker für Modellwechsel *(geplant Q3 2026)*
+Der `!save`-Befehl ist noch nicht implementiert. Die Planung steht (Kapitel 05 + 06): 
+asynchroner Django-Task, `OLLAMA_MAX_LOADED_MODELS=1`, HTMX Polling für Status-Feedback. 
+Wird selten ausgelöst (2–3 Mal pro Tag) — kein permanenter Worker nötig.
+
 
 ### Zusätzliche Meilensteine — bereits erledigt (Juni 2026)
 
 ✅ **Router implementiert (20.06.2026).** Retrieval-getriebenes Profil-System mit 
-5 Kategorien (susi, projekte, lernen, persoenlich, technik). Reranker-gewichtetes 
-Voting auf Chunk-Quellordner. Kein Extra-LLM-Call.
+6 Kategorien (susi, projekte, lernen, persoenlich, technik, wissen). Reranker-gewichtetes 
+Voting auf Chunk-Quellordner. Kein Extra-LLM-Call. `ROUTER_MIN_SCORE = 0.5` als 
+Schwellenwert — darunter greift `agent_britannica` als Live-Fallback (seit 21.07.).
 
 ✅ **Query Rewriting aktiv (20.06.2026).** Löst Ich-Form-Problem und Folgefragen 
 vor dem Retrieval auf. Generisch gehalten für spätere PDF-RAG-Nutzung.
@@ -75,6 +86,32 @@ Rewriter übergeben. Antworten auf 200 Zeichen gekürzt.
 externer Request.
 
 → *Details zu allen Punkten: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
+
+### Zusätzliche Meilensteine — Juli 2026
+
+✅ **Britannica-Integration (14.–16.07.).** Batch-Sync (`britannica_sync.py`) und 
+Live-Fallback (`agent_britannica.py`) als zweiter Tool-Use-Agent. Gecachte Artikel 
+werden beim nächsten Ingest Teil der SUSIpedia — inkrementelles Lernen.
+
+✅ **agent_datum Zweig 2 (17.07.).** Altersberechnung für Entitäten mit genau einem 
+Datum im Chunk. Multi-Chunk-Suche, Entity-scoped Section-Split, Typo-Toleranz. 
+Bekannte Limitation: Multi-Datum-Chunks, zusammengesetzte Entitäten.
+
+✅ **query.py Refactoring (17.07.).** 861-Zeilen-Monolith in 5 Module aufgeteilt 
+(config.py, keywords.py, llm_client.py, utils.py, query.py). `ask_susi_eval()` zu 
+dünnem Wrapper — behebt die Duplizierung die den Double-Rewriting-Bug verursacht hatte.
+
+✅ **Ingest-Umbau (17.07.).** `split_by_headings()` ersetzt `RecursiveCharacterTextSplitter`. 
+617 → 1176 Chunks. `_split_oversized()` als Fallback für Chunks >1500 chars (21.07.).
+
+✅ **Reranker-Performance (21.07.).** Monster-Chunks als Root Cause für 120s-Reranking 
+identifiziert und durch `_split_oversized()` behoben. CrossEncoder auf CPU fixiert, 
+Warmup-Singleton. Ergebnis: 120s → 3–5s.
+
+✅ **Lauf G (15.07.).** ValueCheck False Positives entdeckt, Diagnostic Score 6 als Fix. 
+Bereinigte Korrektheit ~93.8%, Router-Accuracy 67.5%.
+
+→ *Details: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*
 ---
 
 ## Phase 2 — 3-stufiges Speichermodell implementieren *(Q4 2026)*
@@ -86,8 +123,6 @@ produktiven Router gegeben. Die Implementierung folgt in dieser Reihenfolge:
 **Stufe 1 — SQLite Kurzzeitgedächtnis:** Der Chatverlauf wird persistent in einer lokalen SQLite-Tabelle gehalten. Kein Datenverlust bei Ollama-Crashes. Trigger: einzig der explizite `!save`-Befehl.
 
 **Stufe 2 — Automatisierter Türsteher:** Der Markdown-Entwurf durchläuft einen mehrsprachigen Cross-Encoder-Check bevor er die SUSIpedia erreicht. Halluzinierter Inhalt wird abgefangen. Der Modellwechsel passiert asynchron im Hintergrund — `OLLAMA_MAX_LOADED_MODELS=1` verhindert dass beide Modelle gleichzeitig VRAM belegen.
-
-**Asynchroner Worker für Modellwechsel:** Der `!save`-Befehl ist noch nicht implementiert. Die Planung steht (Kapitel 05 + 06): asynchroner Django-Task (Django-Q oder Celery), `OLLAMA_MAX_LOADED_MODELS=1`, HTMX Polling für Status-Feedback. Wird selten ausgelöst (2–3 Mal pro Tag) — kein permanenter Worker nötig.
 
 **Frontend-Feedback während des Speicherns:** Während der Background-Task läuft zeigt das HTMX-Frontend eine kleine Statusanzeige — "Lade Modell...", "Erstelle Zusammenfassung...", "Prüfe auf Halluzinationen...", "Bereit für Review". Der Nutzer wird nicht allein gelassen. Das kostet keine Architektur-Komplexität — HTMX Polling auf einen Status-Endpoint reicht vollständig aus.
 
@@ -166,4 +201,4 @@ Die in Kapitel 06 dokumentierten Grenzerfahrungen bleiben bestehen und werden du
 
 → *Zurück zur Übersicht: [susi_00_übersicht.md](susi_00_übersicht.md)*  
 → *Produktivbetrieb: [susi_08_produktivbetrieb.md](susi_08_produktivbetrieb.md)*   
-*Stand: Juni 2026 · Martin Freimuth*
+*Stand: Juli 2026 · Martin Freimuth*
