@@ -62,7 +62,7 @@ log = logging.getLogger(__name__)
 # ── API Config ─────────────────────────────────────────────────
 BASE_URL = "https://syndication.api.eb.com/production"
 ARTICLE_TYPE_ID = 1  # Encyclopaedia Britannica (Premier)
-FETCH_DELAY = 10      # Sekunden zwischen Requests (ca 5 pro Minute)
+FETCH_DELAY = 90      # Sekunden zwischen Requests (ca 5 pro Minute)
 ARTICLES_PER_FILE = 50  # Artikel pro MD-Datei
 BRITANNICA_BASE_URL = "https://www.britannica.com"
 
@@ -94,7 +94,7 @@ def load_api_key(key_name: str) -> str:
         SystemExit wenn Key nicht gefunden
     """
     load_dotenv(ENV_PATH)
-    env_var = f"BRITANICA_KEY{key_name[-1]}"  # key1 → BRITANICA_KEY1
+    env_var = f"BRITAnNICA_KEY{key_name[-1]}"  # key1 → BRITANICA_KEY1
     key = os.getenv(env_var)
     if not key:
         log.error(f"❌ {env_var} nicht in .env gefunden")

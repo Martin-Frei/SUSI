@@ -100,6 +100,7 @@ DURATION_ENTITIES: dict[str, str] = {
     "houseofstacks": "projekt",
     "hos":           "projekt",
     "martin":        "person",
+    "philip":        "person",    
     "jakob":         "person",
     "adeena":        "person",
     "tanveer":       "person",
@@ -381,24 +382,62 @@ def is_duration_question(text: str) -> Optional[str]:
     if not any(m.search(text) for m in DURATION_PATTERNS):
         return None
     t = text.lower()
+    # 1. Bekannte Entity aus Whitelist (exakter Typ bekannt)
     for e in DURATION_ENTITIES:
         if re.search(rf"\b{re.escape(e)}\b", t):
             return e
+    # 2. Generisch: Name aus Frage extrahieren (Fallback-Typ: person)
+    m = re.search(r"\bwie\s+alt\s+ist\s+(\w+)", t)
+    if m:
+        return m.group(1)
+    m = re.search(r"\bseit\s+wann\s+(?:gibt\s+es|läuft|existiert)\s+(\w+)", t)
+    if m:
+        return m.group(1)
     return None
 
 
 def calculate_duration_from_chunk(question: str, chunk: str,
-                                   today: Optional[date] = None) -> Optional[str]:
+                                   today: Optional[date] = None,
+                                   entity_name: Optional[str] = None) -> Optional[str]:
     """Extracts the start date from the chunk and calculates the difference
-    to today deterministically. Returns None if no date found."""
+    to today deterministically. Returns None if no date found.
+
+    Args:
+        question:    Original question (used for unit detection: "monat" etc.)
+        chunk:       RAG chunk text to extract date from
+        today:       Override for today's date (for testing)
+        entity_name: Entity name from is_duration_question(), passed from
+                     query.py to avoid re-detection on typo'd original question.
+
+    Strategy: If the chunk has multiple ## sections, find the section
+    containing the entity name and parse dates only from that section.
+    This prevents picking Philip's birthday when asking about Jakob
+    (both in the same chunk). Falls back to full-chunk parsing if
+    no section matches.
+    """
     if today is None:
         today = date.today()
+
+    entity = entity_name or is_duration_question(question) or "die genannte Entität"
+    entity_type = DURATION_ENTITIES.get(entity, "person")
 
     chunk_clean = chunk
     for f in CHUNK_FILTER_PATTERNS:
         chunk_clean = f.sub("", chunk_clean)
 
-    dates = _parse_date(chunk_clean)
+    # Try entity-scoped section first (## heading boundaries)
+    sections = re.split(r"(?=^## )", chunk_clean, flags=re.MULTILINE)
+    entity_section = None
+    for section in sections:
+        if entity.lower() in section.lower():
+            entity_section = section
+            break
+
+    # Parse dates from entity section, fall back to full chunk
+    dates = _parse_date(entity_section) if entity_section else _parse_date(chunk_clean)
+    if not dates and entity_section:
+        # Section had no parseable dates, try full chunk as fallback
+        dates = _parse_date(chunk_clean)
     if not dates:
         return None
 
@@ -414,8 +453,6 @@ def calculate_duration_from_chunk(question: str, chunk: str,
     diff_years  = diff_months // 12
     rest_months = diff_months % 12
 
-    entity = is_duration_question(question) or "die genannte Entität"
-    entity_type = DURATION_ENTITIES.get(entity, "projekt")
     t = question.lower()
 
     if entity_type == "person":

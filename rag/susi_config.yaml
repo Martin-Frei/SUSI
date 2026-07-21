@@ -175,3 +175,17 @@ system_prompts:
     Wenn nicht im Kontext: "Dazu fehlt mir noch was in der SUSIpedia!"
 
     Antworte in vollstaendigen Saetzen.'
+
+
+available_models:
+- name: qwen2.5-coder:7b
+  thinking: false
+- name: llama3.1:8b
+  thinking: false
+- name: qwen2.5:7b
+  thinking: false
+- name: qwen3:8b
+  thinking: true
+- name: qwen3:14b
+  thinking: true
+  
