@@ -29,9 +29,9 @@ Unified return format from both sources:
     }
 
 Standalone test:
-    python rag/agent_pedia.py --wikipedia "Python (programming language)"
+    python rag/agent_pedia.py --wikipedia "Python (Programmiersprache)"
     python rag/agent_pedia.py --britannica "Python"
-    python rag/agent_pedia.py --wikipedia "Python" --save
+    python rag/agent_pedia.py --wikipedia "Python (Programmiersprache)" --save
 """
 
 from __future__ import annotations
@@ -52,6 +52,14 @@ WIKIPEDIA_EXTRACT_URL = "https://{lang}.wikipedia.org/w/api.php"
 # Key stored in .env as BRITANNICA_KEY1 — activation pending.
 BRITANNICA_BASE_URL = "https://syndication.api.eb.com/production"
 BRITANNICA_ARTICLE_TYPE_ADVANCED = 1  # from Swagger spec: articleTypeId=1
+
+# Wikipedia sections to filter out — no RAG value
+_WIKI_SKIP_SECTIONS = {
+    "literatur", "weblinks", "einzelnachweise", "siehe auch",
+    "quellen", "anmerkungen", "fußnoten",
+    "references", "external links", "further reading", "see also",
+    "bibliography", "notes",
+}
 
 
 # ── Wikipedia — fully functional ──────────────────────────────────
@@ -165,6 +173,39 @@ def fetch_britannica(topic: str,
     }
 
 
+# ── Wikipedia heading conversion ─────────────────────────────────
+
+def _convert_wiki_headings(text: str, title: str) -> str:
+    """Converts Wikipedia == heading == syntax to ## SUSIpedia headings.
+    Filters out non-content sections (Literatur, Weblinks etc.)
+    and their content. All heading levels (==, ===, ====) become ##
+    with topic prefix for optimal chunking in split_by_headings().
+    """
+    lines = text.split("\n")
+    result = []
+    skip_until_next_heading = False
+
+    for line in lines:
+        # Match == Heading == (2-4 levels)
+        m = re.match(r"^(={2,4})\s*(.+?)\s*\1\s*$", line)
+        if m:
+            heading_text = m.group(2).strip()
+
+            # Skip non-content sections and everything below them
+            if heading_text.lower() in _WIKI_SKIP_SECTIONS:
+                skip_until_next_heading = True
+                continue
+
+            skip_until_next_heading = False
+            result.append(f"\n## {title} — {heading_text}\n")
+        elif skip_until_next_heading:
+            continue
+        else:
+            result.append(line)
+
+    return "\n".join(result)
+
+
 # ── SUSIpedia conversion ──────────────────────────────────────────
 
 def to_susipedia_md(article: dict) -> str:
@@ -176,6 +217,10 @@ def to_susipedia_md(article: dict) -> str:
     - Every ## section names the topic explicitly in its first sentence
     - Prose instead of lists
     - Stand line as last line
+
+    Wikipedia-specific:
+    - Converts == / === / ==== headings to ## with topic prefix
+    - Filters out non-content sections (Literatur, Weblinks, Einzelnachweise)
     """
     today = date.today().isoformat()
     title = article["title"]
@@ -183,6 +228,15 @@ def to_susipedia_md(article: dict) -> str:
     source_url = article["source_url"]
 
     text = article["text"].strip()
+
+    # Wikipedia: convert == headings to ## before building markdown
+    if article["source"] == "wikipedia":
+        text = _convert_wiki_headings(text, title)
+
+    # Split at ## — first part is intro (goes under Übersicht)
+    parts = re.split(r"(?=^## )", text, flags=re.MULTILINE)
+    intro = parts[0].strip() if parts else text
+    sections = parts[1:] if len(parts) > 1 else []
 
     md = f"""# {title} — Wissen ({source.capitalize()})
 Datum: {today}
@@ -192,10 +246,13 @@ Quelle: {source_url}
 
 ## {title} — Übersicht
 
-{text}
-
-## **Stand {date.today().strftime('%d.%m.%Y')}**
+{intro}
 """
+
+    for section in sections:
+        md += "\n" + section.strip() + "\n"
+
+    md += f"\n## **Stand {date.today().strftime('%d.%m.%Y')}**\n"
     return md
 
 
