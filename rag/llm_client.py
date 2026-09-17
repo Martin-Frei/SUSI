@@ -17,52 +17,74 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import requests
+from langdetect import detect, LangDetectException
+from langdetect import DetectorFactory
+
 from rag.config import OLLAMA_URL, LLM_MODEL, KEEP_ALIVE
 from rag.debug import get_logger
 
+DetectorFactory.seed = 0
 log = get_logger(__name__)
+
+# ── Fix 1: detect_language via langdetect ────────────────────────
+#
+# Drop-in-Ersatz für die bisherige LLM-basierte Spracherkennung
+# in rag/llm_client.py (Zeilen 26–64).
+#
+# Vorher:  Ollama-Call mit num_ctx=128 → 4–12 Sekunden pro Frage
+# Nachher: langdetect (Google CLD Port) → <1ms, kein GPU
+#
+# Installation:
+#   pip install langdetect --break-system-packages
+#   (oder im venv: susi_env\Scripts\pip install langdetect)
+#
+# Einbau:
+#   1. In rag/llm_client.py die Zeilen 26–64 komplett ersetzen
+#      durch den Code unten.
+#   2. Import-Block oben in llm_client.py ergänzen:
+#        from langdetect import detect, LangDetectException
+#        from langdetect import DetectorFactory
+#        DetectorFactory.seed = 0
+#   3. Bestehende Imports (requests, OLLAMA_URL) NICHT entfernen —
+#      rewrite_query() braucht die weiterhin.
+#   4. query.py bleibt unverändert (Signatur identisch).
+#
+# ─────────────────────────────────────────────────────────────────
 
 
 # ── Sprach-Erkennung ──────────────────────────────────────────────
-# LLM-basierte Spracherkennung — zuverlässig für alle Sprachen.
-# Warum LLM statt Heuristik?
-# Stop-Wort-Listen funktionieren nur für bekannte Sprachen (EN/DE).
-# qwen2.5-coder:7b ist multilingual und erkennt 50+ Sprachen korrekt.
-# Gibt ISO 639-1 Code zurück (en, de, es, fr, tl, ar, zh, ...).
-# Fail-safe: bei Fehler → "de" als Fallback.
+# Leichtgewichtige Spracherkennung via langdetect (Google CLD Port).
+# Erkennt 55 Sprachen in <1ms ohne GPU, ohne Modell-Download.
+# Ersetzt den bisherigen LLM-Call (4–12s pro Frage).
 #
-def detect_language(text: str, llm_model: str, keep_alive: int) -> str:
+# DetectorFactory.seed = 0 macht die Erkennung deterministisch —
+# ohne Seed schwankt langdetect bei kurzen Texten (z.B. "Was ist SUSI?"
+# → mal "de", mal "af"). Seed muss VOR dem ersten detect()-Call
+# gesetzt werden, daher auf Modulebene.
+#
+def detect_language(text: str, llm_model: str = "", keep_alive: int = 0) -> str:
     """
-    Erkennt die Sprache eines Textes via LLM.
+    Erkennt die Sprache eines Textes via langdetect.
 
     Args:
         text:       Der zu erkennende Text (typisch die Nutzerfrage)
-        llm_model:  Ollama-Modellname
-        keep_alive: Ollama keep_alive Parameter
+        llm_model:  (ignoriert, Kompatibilität mit query.py)
+        keep_alive: (ignoriert, Kompatibilität mit query.py)
 
     Returns:
-        ISO 639-1 Sprachcode (str), z.B. "en", "de", "es", "fr", "tl"
-        Fallback: "de" bei Fehler oder leerer Antwort
+        ISO 639-1 Sprachcode (str), z.B. "en", "de", "es", "fr"
+        Fallback: "de" bei Fehler, leerem Text oder zu kurzem Input
     """
-    payload = {
-        "model":      llm_model,
-        "prompt":     f"What language is this text written in? Answer with only the ISO 639-1 code (e.g. en, de, es, fr, tl, zh, ar). Text: {text}",
-        "stream":     False,
-        "keep_alive": keep_alive,
-        "options": {
-            "temperature": 0.0,
-            "num_ctx":     128,
-        }
-    }
-    try:
-        r = requests.post(OLLAMA_URL, json=payload, timeout=10)
-        lang = r.json().get("response", "").strip().lower()[:5].split()[0]
-        log.info("🌍 Sprache erkannt: %s", lang)
-        return lang if lang else "de"
-    except Exception as e:
-        log.warning("🌍 Spracherkennung fehlgeschlagen (%s) — Fallback: de", e)
+    if not text or len(text.strip()) < 3:
+        log.debug("🌍 Text zu kurz für Erkennung — Fallback: de")
         return "de"
-
+    try:
+        lang = detect(text)
+        log.info("🌍 Sprache erkannt: %s (langdetect)", lang)
+        return lang
+    except LangDetectException:
+        log.warning("🌍 Spracherkennung unsicher — Fallback: de")
+        return "de"
 
 # ── Query Rewriting ───────────────────────────────────────────────
 #

@@ -1,3 +1,6 @@
+# susi_project/urls.py
+
+
 """
 URL configuration for susi_project project.
 
@@ -25,4 +28,11 @@ urlpatterns = [
 ]
  
 if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)    
+    
+# Eval-Dashboard nur laden wenn App vorhanden
+try:
+    from eval import urls as eval_urls
+    urlpatterns.append(path("api/eval/", include(eval_urls)))
+except ImportError:
+    pass

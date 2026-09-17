@@ -110,7 +110,7 @@ def ask_susi(question, chat_history: list | None = None, mode: str = "auto",
     query_rewrite   = cfg.get("query_rewriting", {}).get("active", True)
     router_profil   = "fallback"
 
-    # ── MANUELL-Modus: Overrides anwenden ─────────────────────────
+        # ── Overrides anwenden (Manuell-Modus oder Eval-Dashboard) ────
     if overrides:
         llm_model   = overrides.get("llm_model", llm_model)
         top_k       = int(overrides.get("top_k", top_k))
@@ -123,15 +123,29 @@ def ask_susi(question, chat_history: list | None = None, mode: str = "auto",
             system_prompt = cfg["system_prompts"][override_prompt_name]
         router_active = False
         router_profil = "manuell"
-        log.info("🎛️  MANUELL: %s | k=%s | t=%s | ctx=%s | thinking=%s",
+
+        # Pipeline-Toggles (Eval-Dashboard Worker)
+        if "reranker" in overrides:
+            reranker_active = bool(overrides["reranker"])
+        if "rewriter" in overrides:
+            query_rewrite = bool(overrides["rewriter"])
+        if "router" in overrides:
+            router_active = bool(overrides["router"])
+            if router_active:
+                router_profil = "fallback"
+
+        log.info("🎛️  Overrides: %s | k=%s | t=%s | ctx=%s | thinking=%s",
                  llm_model, top_k, temperature, num_ctx, thinking)
+        log.info("    Pipeline: reranker=%s | rewriter=%s | router=%s",
+                 reranker_active, query_rewrite, router_active)
 
     # 0. Sprache erkennen — vor Agent, Rewriter und Retrieval
     with Timer("detect_language", timings, log):
         lang = detect_language(question, llm_model, keep_alive)
 
     # 0a. agent_datum — deterministische Kalenderfragen (Zweig 1)
-    if mode in ("auto", "manuell") and lang == "de" and agent_datum.is_calendar_question(question):
+    agent_datum_active = overrides.get("agent_datum", True) if overrides else True
+    if agent_datum_active and mode in ("auto", "manuell") and lang == "de" and agent_datum.is_calendar_question(question):
         agent_start = time.time()
         agent_antwort = agent_datum.answer_calendar_question(question)
         agent_wall = round(time.time() - agent_start, 3)
@@ -157,10 +171,31 @@ def ask_susi(question, chat_history: list | None = None, mode: str = "auto",
             result["chunk_scores"]           = []
         return result
 
+    # 1. Query Rewriting — nur bei kurzen Folgefragen
+    #
+    # Bypass-Logik (zwei Guards):
+    # - Keine chat_history → erste Frage im Chat, keine Pronomen aufzulösen
+    # - Frage > 300 Zeichen → eigenständiger Input (z.B. eingefügter Absatz),
+    #   Rewriter-Prompt (num_ctx=768) wird abgeschnitten → Halluzination
+    #   (vgl. Spanisch-Bug 27.07.)
+    #
+    # Rewriting läuft nur bei kurzen Folgefragen wo Coreference-Auflösung
+    # tatsächlich hilft ("Was kann es?" → "Was kann SUSI?").
+    #
     rewritten_query = question
     if query_rewrite:
-        with Timer("rewrite_query", timings, log):
-            rewritten_query = rewrite_query(question, llm_model, keep_alive, chat_history, lang)
+        skip_reason = None
+        if not chat_history:
+            skip_reason = "erste Frage im Chat"
+        elif len(question) > 300:
+            skip_reason = f"Input zu lang ({len(question)} Zeichen)"
+
+        if skip_reason:
+            log.info("✏️  Rewriter-Bypass: %s", skip_reason)
+            timings.add("rewrite_query", 0.0)
+        else:
+            with Timer("rewrite_query", timings, log):
+                rewritten_query = rewrite_query(question, llm_model, keep_alive, chat_history, lang)
 
     # 1. Retrieval (mit umgeschriebener Frage)
     with Timer("retrieval", timings, log):
@@ -244,8 +279,10 @@ def ask_susi(question, chat_history: list | None = None, mode: str = "auto",
     quelldateien = list({doc.metadata.get("source", "?") for doc in docs})
 
     # 4a. agent_datum Zweig 2 — Dauer/Alter aus Chunk, deterministisch
-    duration_entity = (agent_datum.is_duration_question(question)
-                       or agent_datum.is_duration_question(rewritten_query))
+    duration_entity = None
+    if agent_datum_active:
+        duration_entity = (agent_datum.is_duration_question(question)
+                           or agent_datum.is_duration_question(rewritten_query))
     if duration_entity and docs:
         fact = None
         fact_source = None

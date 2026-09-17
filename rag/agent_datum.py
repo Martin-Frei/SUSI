@@ -22,19 +22,22 @@ Usage in rag/query.py (early, right after detect_language):
 Conservative classification — all three conditions must hold:
     1. Concrete date or date anchor in the question
        (date, "heute", "Weihnachten JJJJ", "Silvester JJJJ",
-        "Martins Geburtstag" etc.)
+        "Martins Geburtstag", or implicit via "in N Tagen/Wochen")
     2. Clear calendar operation
        (weekday, days/weeks/months between, +N days/weeks,
-        next/following week etc.)
+        next/following week, "welcher Tag", "was ist heute" etc.)
     3. No SUSIpedia entity name
        (SUSI, StockPredict, GMM, HouseOfStacks, HOS, Portfolio,
         project names, mein/meine)
        Exception: explicit date in the question → entity irrelevant.
        Exception: known birthday anchor → entity irrelevant.
+       Exception: "heute/jetzt/aktuell" in the question → entity irrelevant.
+       Exception: implicit today ("in einer Woche") → entity irrelevant.
 When in doubt → LLM+RAG. The agent only does what it can do reliably.
 
 Standalone test:
     python rag/agent_datum.py --frage "Welcher Wochentag war der 31.12.1999?"
+    python rag/agent_datum.py --frage "Welcher Tag ist in einer Woche?"
     python rag/agent_datum.py --demo
 """
 
@@ -74,6 +77,17 @@ BIRTHDAY_PATTERN = re.compile(
     r"\b(martins?)\s+geburtstag\b", re.IGNORECASE
 )
 
+# German number words for "in einer/zwei/drei Woche" etc.
+# "ein/eine" excluded from general number parsing (article collision)
+# but included here because "in einer Woche" is unambiguous.
+WORD_TO_NUM = {
+    "einer": 1, "eine": 1, "einem": 1, "ein": 1,
+    "zwei": 2, "drei": 3, "vier": 4, "fünf": 5,
+    "sechs": 6, "sieben": 7, "acht": 8, "neun": 9,
+    "zehn": 10, "elf": 11, "zwölf": 12,
+}
+_NUM_WORDS = "|".join(re.escape(w) for w in WORD_TO_NUM)
+
 
 # ── SUSIpedia entities (block list for condition 3) ───────────────
 
@@ -100,7 +114,7 @@ DURATION_ENTITIES: dict[str, str] = {
     "houseofstacks": "projekt",
     "hos":           "projekt",
     "martin":        "person",
-    "philip":        "person",    
+    "philip":        "person",
     "jakob":         "person",
     "adeena":        "person",
     "tanveer":       "person",
@@ -136,11 +150,19 @@ DATE_PATTERNS = [
 
 TODAY_PATTERN = re.compile(r"\b(heute|jetzt|aktuell)\b", re.IGNORECASE)
 
+# "in einer Woche", "nach drei Tagen" etc. — impliziert heute als Referenz
+IMPLICIT_TODAY = re.compile(
+    r"\b(in|nach)\s+(exakt\s+)?(" + _NUM_WORDS + r"|\d+)\s+(tag|tage|tagen|woche|wochen)\b",
+    re.IGNORECASE
+)
+
 
 def _has_date_or_anchor(text: str) -> bool:
     if TODAY_PATTERN.search(text):
         return True
     if BIRTHDAY_PATTERN.search(text):
+        return True
+    if IMPLICIT_TODAY.search(text):
         return True
     return any(m.search(text) for m in DATE_PATTERNS)
 
@@ -150,13 +172,21 @@ def _has_date_or_anchor(text: str) -> bool:
 OPERATION_PATTERNS = [
     re.compile(r"\bwelcher\s+wochentag\b", re.IGNORECASE),
     re.compile(r"\bwochentag\s+(war|ist|fällt|fiel)\b", re.IGNORECASE),
+    # 28.07.: "welcher Tag", "welche Tag" (Tippfehler), "was für ein Tag"
+    re.compile(r"\bwelche[rs]?\s+tag\b", re.IGNORECASE),
+    re.compile(r"\bwas\s+(ist|war)\s+heute\b", re.IGNORECASE),
+    re.compile(r"\bwas\s+für\s+ein\s+tag\b", re.IGNORECASE),
+    re.compile(r"\bwas\s+haben\s+wir\s+heute\b", re.IGNORECASE),
+    re.compile(r"\bden\s+wievielten\s+haben\s+wir\b", re.IGNORECASE),
+    re.compile(r"\bwelches\s+datum\b", re.IGNORECASE),
     re.compile(r"\bwie\s*viele?\s+tage?\b.{0,40}?\b(seit|bis|zwischen|zw\.)\b",
                re.IGNORECASE),
     re.compile(r"\bwie\s*viele?\s+wochen?\b.{0,40}?\b(seit|bis|zwischen|zw\.|noch)\b",
                re.IGNORECASE),
     re.compile(r"\bwie\s*viele?\s+monate?\b.{0,40}?\b(seit|bis|zwischen|zw\.)\b",
                re.IGNORECASE),
-    re.compile(r"\b(in|nach)\s+(exakt\s+)?\d+\s+(tag|tage|woche|wochen)\b",
+    # 28.07.: Zahlwörter + Ziffern: "in einer Woche", "nach drei Tagen", "in 5 Tagen"
+    re.compile(r"\b(in|nach)\s+(exakt\s+)?(" + _NUM_WORDS + r"|\d+)\s+(tag|tage|tagen|woche|wochen)\b",
                re.IGNORECASE),
     re.compile(r"\b(nächste|übernächste|naechste|uebernaechste)\s+woche\b",
                re.IGNORECASE),
@@ -172,9 +202,22 @@ def _has_calendar_operation(text: str) -> bool:
 # ── Condition 3 — no SUSIpedia entity ────────────────────────────
 
 def _has_entity(text: str) -> Optional[str]:
+    """Prüft ob ein SUSIpedia-Entitätsname im Text vorkommt.
+
+    Ausnahmen (Entity wird ignoriert):
+    - Explizites Datum im Text (DD.MM.YYYY etc.)
+    - Bekannter Geburtstags-Anker
+    - heute/jetzt/aktuell im Text — Kalenderfrage trotz Anrede
+      ("Hallo Susi, welcher Tag ist heute?" soll durchgehen)
+    - Implizites heute ("in einer Woche" etc.)
+    """
     if any(m.search(text) for m in DATE_PATTERNS):
         return None
     if BIRTHDAY_PATTERN.search(text):
+        return None
+    if TODAY_PATTERN.search(text):
+        return None
+    if IMPLICIT_TODAY.search(text):
         return None
     t = text.lower()
     for e in ENTITIES:
@@ -303,8 +346,22 @@ def answer_calendar_question(text: str, today: Optional[date] = None) -> str:
     dates = _parse_date(text)
     t = text.lower()
 
-    # 1) Weekday
-    if re.search(r"\bwochentag\b", t) and dates:
+    # 0) "Was ist heute?" / "Welcher Tag ist heute?" / "Was haben wir heute?"
+    #    Reine Heute-Frage ohne explizites Datum → Datum + Wochentag zurückgeben.
+    #    Muss VOR Branch 1 stehen, weil Branch 1 ein geparstes Datum braucht
+    #    und "heute" keines liefert.
+    if (TODAY_PATTERN.search(t) and not dates
+            and (re.search(r"\bwelche[rs]?\s+tag\b", t)
+                 or re.search(r"\bwas\s+(ist|war)\s+heute\b", t)
+                 or re.search(r"\bwas\s+für\s+ein\s+tag\b", t)
+                 or re.search(r"\bwas\s+haben\s+wir\s+heute\b", t)
+                 or re.search(r"\bden\s+wievielten\s+haben\s+wir\b", t)
+                 or re.search(r"\bwelches\s+datum\b", t))):
+        return (f"Heute ist {WEEKDAY_NAMES[today.weekday()]}, "
+                f"der {_format_date(today)}.")
+
+    # 1) Weekday of a specific date
+    if re.search(r"\b(wochentag|welche[rs]?\s+tag)\b", t) and dates:
         d = dates[0]
         verb = "war" if d < today else "ist"
         return f"Der {_format_date(d)} {verb} ein {WEEKDAY_NAMES[d.weekday()]}."
@@ -324,13 +381,23 @@ def answer_calendar_question(text: str, today: Optional[date] = None) -> str:
                     f"{_format_date(d2)} liegen {diff // 7} volle Wochen ({diff} Tage).")
         return f"Zwischen dem {_format_date(d1)} und dem {_format_date(d2)} liegen {diff} Tage."
 
-    # 3) In N days/weeks
-    m = re.search(r"\b(in|nach)\s+(exakt\s+)?(\d+)\s+(tag|tage|woche|wochen)\b", t)
+    # 3) In N days/weeks — Ziffern und Zahlwörter
+    m = re.search(
+        r"\b(in|nach)\s+(exakt\s+)?(" + _NUM_WORDS + r"|\d+)\s+(tag|tage|tagen|woche|wochen)\b",
+        t
+    )
     if m:
-        n = int(m.group(3))
+        raw = m.group(3)
+        n = WORD_TO_NUM.get(raw, None)
+        if n is None:
+            n = int(raw)
         unit = m.group(4)
         target = today + timedelta(days=n * (7 if unit.startswith("woche") else 1))
-        return f"Heute ist der {_format_date(today)}. In {n} {unit} ist das der {_format_date(target)}."
+        label = "Woche" if unit.startswith("woche") else "Tag"
+        plural = "n" if n != 1 else ""
+        return (f"Heute ist {WEEKDAY_NAMES[today.weekday()]}, der {_format_date(today)}. "
+                f"In {n} {label}{plural} ist {WEEKDAY_NAMES[target.weekday()]}, "
+                f"der {_format_date(target)}.")
 
     # 4) Next / following week
     if re.search(r"\b(übernächste|uebernaechste)\s+woche\b", t):
@@ -476,7 +543,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SUSI date agent")
     parser.add_argument("--frage", help="Classify + answer a single question")
     parser.add_argument("--demo", action="store_true",
-                        help="Run 10 date arithmetic test questions")
+                        help="Run demo test questions")
     args = parser.parse_args()
 
     if args.frage:
@@ -502,6 +569,9 @@ if __name__ == "__main__":
             ("datum_08", "Welches Datum ist uebernaechste Woche, gerechnet ab heute?"),
             ("datum_09", "Was liegt laenger zurueck: ein Projektstart im Januar 2026 oder ein Projektstart im Maerz 2026?"),
             ("datum_10", "Wie viele Wochen sind es noch bis Weihnachten 2026, gerechnet ab heute?"),
+            ("datum_11", "Hallo Susi welche Tag ist heute?"),
+            ("datum_12", "Welcher Tag ist in einer Woche?"),
+            ("datum_13", "Was für ein Tag ist in drei Tagen?"),
         ]
         py, llm = 0, 0
         for fid, f in fragen:

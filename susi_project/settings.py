@@ -41,9 +41,21 @@ INSTALLED_APPS = [
     # SUSI Apps
     'core',
     'rag',
+    # Eval Apps 
+    'rest_framework',
+    'django_q',
+    'corsheaders',
 ]
 
+# Eval-Dashboard nur laden wenn vorhanden
+try:
+    import eval
+    INSTALLED_APPS.append('eval')
+except ImportError:
+    pass
+
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -142,3 +154,16 @@ MAX_UPLOAD_SIZE_MB = 20
  
 # HTMX-freundliche Session-Config
 SESSION_ENGINE = "django.contrib.sessions.backends.db"
+
+# Django-Q Task Queue (SQLite als Broker)
+Q_CLUSTER = {
+    'name': 'susi-eval',
+    'workers': 1,
+    'timeout': 7200,      # 2 Stunden max pro Task
+    'retry': 7200,
+    'orm': 'default',     # SQLite als Broker, kein Redis nötig
+    'catch_up': False,
+}
+
+# CORS für React Dev-Server (nur lokal!)
+CORS_ALLOW_ALL_ORIGINS = True

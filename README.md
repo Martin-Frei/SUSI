@@ -9,7 +9,7 @@
 ![Ollama](https://img.shields.io/badge/Ollama-000000?style=for-the-badge&logoColor=white)
 ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=for-the-badge&logoColor=white)
 
-**97% Antwort-Korrektheit · 5.860 automatisierte Eval-Runs · 0.001s deterministisch statt 8s LLM-Halluzination**
+**97% Antwort-Korrektheit · 5.860 automatisierte Eval-Runs · Latenz halbiert: 26s → ~12s · 0.001s deterministisch statt 8s LLM-Halluzination**
 
 ---
 
@@ -46,17 +46,23 @@ Drei Fragen, drei unterschiedliche Mechanismen:
 ```
 Frage rein
      ↓
-Spracherkennung (ISO 639-1, LLM-Call, ~0.1s)
+Spracherkennung (langdetect, ~0.002s)
      ↓
 agent_datum Guard ──── Kalenderfrage? ────► Python datetime → Antwort (~0.001s)
+     │ nein
+     ▼
+Rewriter-Bypass ─── Erste Frage oder >300 Zeichen? ──► Query unverändert weiter
      │ nein
      ▼
 Query Rewriting (Coreference-Auflösung, letzte 2 Q/A)
      ↓
 ChromaDB Retrieval (bge-m3, top-k Chunks)
      ↓
-bge-reranker-v2-m3 (Top-n behalten)
+bge-reranker-v2-m3 (Top-n behalten, 3–5s auf CPU)
      ↓
+agent_britannica ── Score ≤ 0.5? ────► Britannica/Wikipedia Fallback
+     │ nein
+     ▼
 agent_datum Zweig 2 ── Laufzeitfrage? ───► Datum aus Chunk, Python rechnet
      │ nein                                 Fakt ins Prompt injiziert
      ▼
@@ -66,6 +72,15 @@ LLM generiert Antwort (qwen2.5-coder:7b / llama3.1:8b / qwen2.5:7b)
      ↓
 Frontend (Django + HTMX, tok/s + Quelldateien)
 ```
+
+### Speed-Optimierungen (Juli/August 2026)
+
+| Phase | Vorher | Nachher | Fix |
+|---|---|---|---|
+| Spracherkennung | 4–12s (LLM) | 0.002s | `langdetect` Library statt Ollama-Call |
+| Query Rewriting | 5–9s (immer) | 0s oder 5–9s | Bypass bei erster Frage oder >300 Zeichen |
+| Reranking | 100–130s | 3–5s | Duplikates Warmup entfernt, CPU-Pinning, Chunk-Split |
+| **Gesamt** | **~26–30s** | **~10–15s** | |
 
 ---
 
@@ -87,7 +102,23 @@ Das Herzstück von SUSI: Nicht Keyword-Matching sondern die **SUSIpedia-Ordnerst
 | lernen | llama3.1:8b | Lernmaterial, Konzepte |
 | persoenlich | qwen2.5:7b | Persönliches, Job |
 | technik | qwen2.5-coder:7b | Hardware, Tools |
-| wissen | geplant | Britannica-Wissensbasis |
+| wissen | qwen2.5:7b | Britannica/Wikipedia Wissensbasis |
+
+**Fallback** bei max. Reranker-Score ≤ 0.5: Profil `persoenlich` oder `agent_britannica` Fallback.
+
+---
+
+## Agenten-Architektur
+
+SUSI nutzt deterministische Agenten die Fragen vor oder nach der RAG-Pipeline abfangen. Prinzip: Wenn die Antwort berechenbar ist, wird kein LLM gefragt.
+
+| Agent | Funktion | Latenz |
+|---|---|---|
+| `agent_datum` | Kalenderfragen (Zweig 1: direkt, Zweig 2: Datum aus Chunk) | ~0.001s |
+| `agent_pedia` | Wikipedia-Integration, Heading-Konvertierung | variabel |
+| `agent_britannica` | On-demand Britannica-Fetch bei Reranker-Score ≤ 0.5 | variabel |
+
+**Namenskonvention:** `agent_*.py` für alle Werkzeuge. Geplant: `agent_rechner` (Mathe), `agent_meta` (SUSI-Config-Fragen), `agent_duplikat` (SUSIpedia-Duplikatprüfung).
 
 ---
 
@@ -95,7 +126,7 @@ Das Herzstück von SUSI: Nicht Keyword-Matching sondern die **SUSIpedia-Ordnerst
 
 SUSI hat ein vollständiges RAG-Evaluierungs-Framework unter `tools/evaluation/`:
 
-**Vier-Stufen-Pipeline:** Auto-Scorer (Diagnostic Scale 0–5) → ValueCheck (deterministische Zahlen/Datums-Prüfung) → RAGAS (Grauzonen) → Haiku-Judge (verbleibende Unklarheiten)
+**Vier-Stufen-Pipeline:** Auto-Scorer (Diagnostic Scale 0–6) → ValueCheck (deterministische Zahlen/Datums-Prüfung) → RAGAS (Grauzonen) → Haiku-Judge (verbleibende Unklarheiten)
 
 ### Ergebnisse
 
@@ -105,7 +136,10 @@ SUSI hat ein vollständiges RAG-Evaluierungs-Framework unter `tools/evaluation/`
 | Lauf E | 293 | 586 | 96.9% (qwen3:8b) | Thinking=on vs. off: 0.011 Punkte Unterschied |
 | Lauf F | 293 | 293 | Bug gefunden | Doppeltes Rewriting kostete 16 Prozentpunkte |
 
-**Wichtigste Erkenntnis:** Die größte Qualitätsverbesserung kam nicht durch Modell-Tuning sondern durch bessere Dokumentstruktur — Retrieval Hit Rate von **36% auf 91%** allein durch SUSIpedia-Formatierung und Chunk-Size-Erhöhung.
+**Wichtigste Erkenntnisse:**
+- Die größte Qualitätsverbesserung kam nicht durch Modell-Tuning sondern durch bessere Dokumentstruktur — Retrieval Hit Rate von **36% auf 91%** allein durch SUSIpedia-Formatierung und Chunk-Size-Optimierung.
+- Fine-Tuning auf SUSIpedia-Daten ist ungeeignet: zu wenig Chunks, Living Knowledge Base — RAG ist architektonisch überlegen weil das Wissen extern, auditierbar und ohne Retraining aktualisierbar bleibt.
+- Parameterdifferenzen zwischen Modellkonfigurationen sind minimal im Vergleich zur Dokumentqualität.
 
 ---
 
@@ -114,17 +148,20 @@ SUSI hat ein vollständiges RAG-Evaluierungs-Framework unter `tools/evaluation/`
 | Komponente | Technologie |
 |---|---|
 | Backend | Django |
-| Frontend | HTMX |
+| Frontend | HTMX (AUTO/MANUELL-Modus, Chat-History, HitL-Queue) |
 | LLM primär | Ollama – `qwen2.5-coder:7b` |
 | LLM sekundär | Ollama – `llama3.1:8b`, `qwen2.5:7b` |
 | LLM optional | `qwen3:8b`, `qwen3:14b` (Thinking-Modus) |
 | Embeddings | `BAAI/bge-m3` |
-| Reranker | `BAAI/bge-reranker-v2-m3` |
-| Vector Store | ChromaDB (lokal) |
+| Reranker | `BAAI/bge-reranker-v2-m3` (CPU-pinned, Singleton) |
+| Vector Store | ChromaDB (lokal, HNSW auf CPU) |
 | Orchestrierung | LangChain |
+| Spracherkennung | `langdetect` (55 Sprachen, <1ms) |
 | Wissensbasis | SUSIpedia – Markdown-Dateien, 617+ Chunks |
+| Externe Quellen | Britannica API (Gist), Wikipedia |
 | Konfiguration | `susi_config.yaml` – Single Source of Truth |
-| Tool Use | `agent_datum.py` – deterministisch, 0.001s |
+| Tool Use | `agent_datum`, `agent_pedia`, `agent_britannica` |
+| Debug-System | `rag/debug.py` — Logger, Timer, TimingCollector, rotierende Logdateien |
 | Performance | `keep_alive: 300` — Modelle bleiben 5 Min. im VRAM, kein 40s Cold-Start |
 
 **Hardware:** AMD Ryzen 9 5900X · 32 GB RAM · RTX 4070 12 GB VRAM
@@ -197,24 +234,36 @@ SUSI/
 │   ├── job/                     ← Bewerbungen, CV, LinkedIn
 │   ├── martin/                  ← Persönliches Profil
 │   ├── technik/                 ← Hardware, Tools, RAG-Einstellungen
-│   ├── wissen/                  ← Britannica Wissensbasis (in Aufbau)
+│   ├── wissen/                  ← Britannica Wissensbasis (221+ Artikel)
 │   ├── familie/                 ← Familiäre Kontexte
 │   └── hobbys/                  ← Interessen
 ├── rag/
-│   ├── query.py                 ← Produktions-Pipeline
+│   ├── query.py                 ← Pipeline-Kern (~280 Zeilen, refactored)
+│   ├── config.py                ← YAML-Loading + statische Konstanten
+│   ├── keywords.py              ← Keyword-Extraktion
+│   ├── llm_client.py            ← detect_language, rewrite_query, create_summary
+│   ├── utils.py                 ← Hilfsfunktionen
+│   ├── debug.py                 ← Logger, Timer, TimingCollector
 │   ├── router.py                ← Retrieval-getriebener Profil-Router
 │   ├── agent_datum.py           ← Tool Use: deterministisch Datum/Laufzeit
+│   ├── agent_pedia.py           ← Wikipedia-Integration
+│   ├── agent_britannica.py      ← On-demand Britannica-Fallback
 │   ├── ingest.py                ← Markdown → ChromaDB (MD5-Hash-Upsert)
 │   └── susi_config.yaml         ← Single Source of Truth
-├── core/                        ← Django App (Views, URLs, Templates)
+├── core/                        ← Django App (Views, Models, Templates)
+│   └── models.py                ← Chat, Message, QueueItem
 ├── tools/
-│   └── evaluation/              ← RAG Evaluation Framework
-│       ├── grid_run.py          ← Eval-Runner
-│       ├── auto_scorer.py       ← Diagnostic Scale 0–5 + ValueCheck
-│       ├── valuecheck.py        ← Deterministische Zahlen/Datums-Prüfung
-│       ├── referenz_loader.py   ← Dynamische Referenz-Templates
-│       ├── ragas_scorer.py      ← RAGAS für Grauzonen
-│       └── analyse_csv.py       ← Router-Accuracy + Cross-Tab
+│   ├── evaluation/              ← RAG Evaluation Framework
+│   │   ├── grid_run.py          ← Eval-Runner
+│   │   ├── auto_scorer.py       ← Diagnostic Scale 0–6 + ValueCheck
+│   │   ├── valuecheck.py        ← Deterministische Zahlen/Datums-Prüfung
+│   │   ├── referenz_loader.py   ← Dynamische Referenz-Templates
+│   │   ├── ragas_scorer.py      ← RAGAS für Grauzonen
+│   │   ├── analyse_csv.py       ← Router-Accuracy + Cross-Tab
+│   │   └── chunk_audit.py       ← ChromaDB-Diagnose (Übergroße Chunks)
+│   └── britannica_index.json    ← Artikel-Tracking (Delta-Updates)
+├── A_documentation/
+│   └── susi_wissenschaft/       ← 8-teilige wissenschaftliche Doku (öffentlich)
 └── manage.py
 ```
 
@@ -228,17 +277,22 @@ Ollama + ChromaDB + LangChain + Django/HTMX. Vollständiges Eval-Framework. Quer
 ### Stufe 1.1 – Retrieval-getriebener Router ✅
 Dynamische Profil-Auswahl aus SUSIpedia-Ordnerstruktur. Kein Keyword-Matching.
 
-### Stufe 1.2 – Tool Use / agent_datum ✅
-Deterministischer Guard vor dem LLM. Kalenderfragen in 0.001s statt 8s. Zwei Zweige: direkte Rechnung + Datum aus Chunk.
+### Stufe 1.2 – Tool Use / Agenten ✅
+Deterministischer Guard vor dem LLM. Kalenderfragen in 0.001s statt 8s. Modulare Architektur: `agent_datum`, `agent_pedia`, `agent_britannica`.
 
-### Stufe 1.3 – Wissenserweiterung (aktiv)
-Britannica API Integration. Neues Profil `wissen`. agent_britannica als zweites Werkzeug.
+### Stufe 1.3 – Wissenserweiterung ✅ (Basis)
+Britannica API Integration mit 221+ Artikeln in `docs/wissen/`. Wikipedia-Fallback via `agent_pedia`. On-demand-Fetch bei niedrigem Reranker-Score. Ausbau läuft.
+
+### Stufe 1.4 – Speed & Modularisierung ✅
+Pipeline-Latenz halbiert (26s → ~12s). `query.py` in fünf fokussierte Module aufgeteilt. Debug-System mit Phasen-Timing. Reranker-Performance 120s → 3–5s.
 
 ### Stufe 2 – Physischer Assistent (geplant)
-Arduino + Raspberry Pi · Sensoren · Smart Home via Home Assistant.
+Raspberry Pi 5 als Sensor-/Voice-Gateway · Whisper STT · Hailo AI HAT+ für Vision · Home Assistant Integration.
 
 ### Stufe 3 – Persönlicher Lebensassistent (Vision)
 Vollständiges Second Brain · LangChain Agents · eigenständiges Handeln.
+
+**Hardware-Roadmap:** Dual RTX 3090 Build (2× 24 GB = 48 GB VRAM) auf AM5-Plattform, Herbst 2026. Codename: **David**. Ermöglicht 35B+ Modelle, vLLM, Reranker auf GPU.
 
 ---
 
@@ -248,6 +302,7 @@ Vollständiges Second Brain · LangChain Agents · eigenständiges Handeln.
 - Festplatte verschlüsselt via BitLocker
 - Keine Telemetrie · einziger externer Call: Britannica API (nur Themennamen, opt-in)
 - Lokale Fonts, kein externer Request im Frontend
+- Prompt-Injection-Schutz auf der Roadmap (relevant ab externer Dokumenten-Ingestion)
 
 ---
 
@@ -261,4 +316,4 @@ Vollständiges Second Brain · LangChain Agents · eigenständiges Handeln.
 
 ---
 
-*Entwickler: Martin Freimuth · [github.com/Martin-Frei](https://github.com/Martin-Frei) · [martin-freimuth.dev](https://martin-freimuth.dev) · Stand: Juli 2026*
+*Entwickler: Martin Freimuth · [github.com/Martin-Frei](https://github.com/Martin-Frei) · [martin-freimuth.dev](https://martin-freimuth.dev) · Stand: August 2026*

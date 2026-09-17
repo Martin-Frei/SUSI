@@ -1,0 +1,10 @@
+/* ============================================================
+   App.css — Component-specific styles beyond Tailwind
+   Keep minimal — prefer Tailwind classes in JSX.
+   ============================================================ */
+
+/* Pulse animation for live indicator dot */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}

@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand */
+  --color-primary_gold:       #9A7000;
+
+  /* Backgrounds */
+  --color-dark_background:    #12122a;
+  --color-surface_dark:       #1a1a2e;
+
+  /* Terminal palette */
+  --color-terminal_bg:        #1a1a2e;
+  --color-terminal_txt_gold:  #9A7000;
+  --color-terminal_green:     #4CAF50;
+  --color-terminal_orange:    #FF9800;
+  --color-terminal_red:       #f44336;
+  --color-terminal_gray:      #666;
+}
+
+/* Global resets */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background-color: #12122a;
+  color: #fff;
+  font-family: system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar styling for dark theme */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #12122a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Select dropdown styling */
+select option {
+  background-color: #1a1a2e;
+  color: #fff;
+}

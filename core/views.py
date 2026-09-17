@@ -80,7 +80,7 @@ def _thinking_faehige_modelle() -> set:
 def chat_view(request):
     """Hauptseite — Chat mit SUSI"""
     chat      = _get_or_create_chat(request)
-    messages  = chat.messages.all()
+    messages  = chat.messages.all()  # type: ignore[attr-defined]
     chat_mode = request.session.get("chat_mode", "AUTO")
 
     # Alle Chats für die Sidebar-Liste (neueste zuerst)
@@ -164,7 +164,7 @@ def ask_view(request):
     # ── Chat-History für Query Rewriter aus DB laden ───────────────
     # Letzte 2 vollständige Q/A-Paare aus der DB holen.
     # Nur Messages des aktiven Chats — kein Cross-Chat-Kontext.
-    db_messages  = list(chat.messages.order_by("created_at"))
+    db_messages  = list(chat.messages.order_by("created_at"))   # type: ignore[attr-defined]
     chat_history = []
     i = 0
     while i < len(db_messages) - 1:
@@ -282,7 +282,7 @@ def settings_view(request):
         else:
             ms["thinking"] = False
 
-    chat.manuell_settings = ms
+    chat.manuell_settings = ms  # type: ignore[assignment]
     chat.save(update_fields=["manuell_settings"])
 
     return HttpResponse('<div class="status-msg status-msg--ok">Einstellungen gespeichert.</div>')
@@ -291,7 +291,7 @@ def settings_view(request):
 def history_view(request):
     """HTMX-Endpunkt — Chat-History als Fragment (legacy, für Kompatibilität)"""
     chat     = _get_or_create_chat(request)
-    messages = chat.messages.all()
+    messages = chat.messages.all()   # type: ignore[attr-defined]
     return render(request, "core/history.html", {"messages": messages})
 
 
@@ -335,16 +335,22 @@ def set_mode_view(request):
     chat = _get_or_create_chat(request)
     Chat.objects.filter(id=chat.id).update(mode=mode)
 
+    # Slider-Werte aus dem Chat laden (nicht aus der Config) —
+    # sonst sieht der User nach dem Mode-Wechsel die falschen Werte.
+    ms = _get_manuell_settings(chat)
+
     return render(request, "core/partials/mode_toggle.html", {
-        "chat_mode":     mode,
-        "modes":         [("AUTO", "AUTO"), ("MANUELL", "MANUELL"), ("CHUNKING", "CHUNKING")],
-        "llm_model":     cfg["generation"]["llm_model"],
-        "embedding_model": cfg["retrieval"]["embedding_model"],
-        "top_k":         cfg["retrieval"]["top_k"],
-        "num_ctx":       cfg["generation"]["num_ctx"],
-        "algorithm":     cfg["retrieval"]["algorithm"],
-        "temperature":   cfg["generation"]["temperature"],
-        "system_prompt": cfg["generation"]["system_prompt"],
+        "chat_mode":        mode,
+        "modes":            [("AUTO", "AUTO"), ("MANUELL", "MANUELL"), ("CHUNKING", "CHUNKING")],
+        "llm_model":        ms["llm_model"],
+        "embedding_model":  cfg["retrieval"]["embedding_model"],
+        "top_k":            ms["top_k"],
+        "num_ctx":          ms["num_ctx"],
+        "algorithm":        ms["algorithm"],
+        "temperature":      ms["temperature"],
+        "system_prompt":    ms["system_prompt"],
+        "thinking":         ms["thinking"],
+        "available_models": cfg.get("available_models", []),
     })
 
 

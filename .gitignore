@@ -65,9 +65,10 @@ tools/evaluation/testfragen_big_run.json
 tools/evaluation/results/*.json
 
 # Blockiert lokalen Konfigurations-Müll deiner Editoren
-.vscode/*.json
+
 .idea/*.json
 
+eval/
 .claude/
 # Temporaere Debug-Scripts
 check_*.py
@@ -80,3 +81,22 @@ rag/query_old.py
 tools/britannica_index.json
 tools/britannica_index.json.bak
 
+# Logs
+logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+/node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
